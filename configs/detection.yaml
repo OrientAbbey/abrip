@@ -1,0 +1,53 @@
+# Seuils par defaut. A recalibrer en lot L5, resultats consignes dans docs/calibration.md
+detectors:
+  moas:
+    enabled: true
+    min_peers_per_origin: 2
+    ignore_same_organisation: true
+    ignore_direct_relationship: true
+    ignore_stable_origins: true       # L6 — un couple (préfixe, origine) stable n'est pas suspect
+    stability_lookback_days: 14
+    stability_min_days_seen: 3
+    ignore_authorised_origins: true   # L4a — ROA multi-origine ou objet route IRR cohérent
+    ignore_known_anycast: true        # L6 — catalogue public + chemins divergents
+    min_duration_minutes: 5
+    score_weight: 0.30
+  subprefix:
+    enabled: true
+    min_extra_specificity: 1
+    require_roa_on_covering: true
+    use_irr_fallback: true            # L4a — repli IRR quand RPKI répond not-found
+    score_weight: 0.25
+  rpki_invalid:
+    enabled: true
+    min_peers: 3
+    min_duration_minutes: 10
+    score_weight: 0.20
+  valley_free:
+    enabled: true
+    min_peers: 2
+    ignore_unknown_relationships: true
+    min_sources_for_critical: 2       # L3 — une seule source (CAIDA) plafonne en watch
+    score_weight: 0.15
+  churn_spike:
+    enabled: true
+    window: "1h"
+    baseline_days: 14
+    mad_threshold: 6.0
+    min_absolute_updates: 50
+    score_weight: 0.05
+  visibility_drop:
+    enabled: true
+    relative_drop: 0.40
+    min_collectors: 2
+    min_baseline_ratio: 0.30
+    score_weight: 0.05
+  bogon:
+    enabled: true
+    score_weight: 0.10
+
+correlation:
+  incident_window_minutes: 60
+  severity_thresholds:
+    watch: 0.35
+    critical: 0.65

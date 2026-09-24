@@ -1,0 +1,22 @@
+# Le frontend est compilé dans l'image : ni les dépendances ni le build local
+# n'ont à être copiés.
+frontend/node_modules
+frontend/dist
+frontend/tsconfig.tsbuildinfo
+
+# Les données sont régénérées à la construction.
+data/
+*.duckdb
+
+# Bruit local
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.venv/
+venv/
+.git/
+.env
+.DS_Store

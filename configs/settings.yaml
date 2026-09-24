@@ -1,0 +1,62 @@
+data_dir: ./data
+log_level: INFO
+
+ingestion:
+  broker_url: https://api.bgpkit.com/v3/broker/search
+  user_agent: "abrip/0.1 (African BGP Routing Intelligence Platform)"
+  max_retries: 3
+  backoff_seconds: 2.0
+  concurrency: 3
+  raw_retention_days: 30
+  request_timeout: 120
+
+etl:
+  parser: auto            # auto | bgpkit | mrtparse
+  batch_rows: 500000
+  compression: zstd
+  keep_communities: true
+  drop_ipv6: false
+
+reference:
+  afrinic_delegated_url: https://ftp.afrinic.net/pub/stats/afrinic/delegated-afrinic-extended-latest
+  rir_delegated_urls:
+    ripencc: https://ftp.ripe.net/pub/stats/ripencc/delegated-ripencc-extended-latest
+    arin: https://ftp.arin.net/pub/stats/arin/delegated-arin-extended-latest
+    apnic: https://ftp.apnic.net/stats/apnic/delegated-apnic-extended-latest
+    lacnic: https://ftp.lacnic.net/pub/stats/lacnic/delegated-lacnic-extended-latest
+  rpki_url: https://rpki.cloudflare.com/rpki.json
+  caida_as_rel_base: https://publicdata.caida.org/datasets/as-relationships/serial-2/
+  caida_as_org_base: https://publicdata.caida.org/datasets/as-organizations/
+  extra_african_asns: []
+
+analytics:
+  windows: ["5m", "1h", "24h"]
+  default_window: "1h"
+  min_peers_for_metric: 2
+
+api:
+  host: 127.0.0.1
+  port: 8000
+  cors_origins: ["http://localhost:5173"]
+  api_key: null
+  cache_ttl_seconds: 60
+  max_page_size: 500
+  static_dir: frontend/dist
+
+# Remédiations L1 (confirmation plan de données), L3 (corroboration multi-
+# source des relations CAIDA) et L4a (repli IRR). Voir docs/limites-et-remediations.md.
+enrichment:
+  request_timeout: 15.0
+  dataplane_enabled: true
+  dataplane_min_severity: watch      # ne pas dépenser d'appels réseau sur les `info`
+  ioda_base_url: https://api.ioda.inetintel.cc.gatech.edu/v2
+  ripe_atlas_base_url: https://atlas.ripe.net/api/v2
+  peeringdb_base_url: https://www.peeringdb.com/api
+  relationship_min_sources_for_critical: 2
+  ripedb_base_url: https://rest.db.ripe.net
+  irr_sources: [RADB, RIPE, APNIC, ARIN]
+  cloudflare_radar_base_url: https://api.cloudflare.com/client/v4
+  # Jeton optionnel (troisième source de confirmation L1) : laisser vide pour
+  # continuer avec IODA + RIPE Atlas seuls. Ne jamais committer de vrai jeton
+  # ici — le passer via la variable d'environnement ABRIP_ENRICHMENT__CLOUDFLARE_RADAR_TOKEN.
+  cloudflare_radar_token: null

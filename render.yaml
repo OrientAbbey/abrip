@@ -1,0 +1,12 @@
+# Déploiement Render — plan gratuit.
+# Render injecte PORT ; le Dockerfile le consomme déjà.
+services:
+  - type: web
+    name: abrip
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    envVars:
+      - key: ABRIP_LOG_LEVEL
+        value: INFO

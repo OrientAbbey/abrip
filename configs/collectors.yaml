@@ -1,0 +1,79 @@
+# Collecteurs BGP suivis.
+# role: local    -> point de vue situe en Afrique (mesure la vue interne)
+# role: external -> point de vue hors Afrique (mesure la visibilite mondiale)
+# Liste a valider en lot L0 par comptage effectif des peers africains dans un RIB.
+collectors:
+  - name: route-views.napafrica
+    project: routeviews
+    location: "Johannesburg, ZA"
+    role: local
+    enabled: true
+  - name: route-views.jinx
+    project: routeviews
+    location: "Johannesburg, ZA"
+    role: local
+    enabled: true
+  - name: route-views.kixp
+    project: routeviews
+    location: "Nairobi, KE"
+    role: local
+    enabled: false
+  - name: route-views.gixa
+    project: routeviews
+    location: "Accra, GH"
+    role: local
+    enabled: false
+  - name: rrc19
+    project: riperis
+    location: "Johannesburg, ZA"
+    role: local
+    enabled: true
+  - name: route-views2
+    project: routeviews
+    location: "Eugene, US (multihop)"
+    role: external
+    enabled: true
+  - name: rrc00
+    project: riperis
+    location: "Amsterdam, NL (multihop)"
+    role: external
+    enabled: true
+
+  # --- L2 : couverture observationnelle -----------------------------------
+  # Une part significative du trafic intra-africain transite encore par des
+  # points d'échange européens : ces collecteurs élargissent la couverture
+  # sans changer d'architecture (même MRTParser, même téléchargeur). Rôle
+  # "external" par convention de localisation, malgré leur utilité pour la
+  # couverture africaine — voir docs/limites-et-remediations.md (L2).
+  # Désactivés par défaut : à activer une fois le volume de données mesuré.
+  - name: route-views.linx
+    project: routeviews
+    location: "Londres, UK (LINX)"
+    role: external
+    enabled: false
+  - name: route-views.amsix
+    project: routeviews
+    location: "Amsterdam, NL (AMS-IX)"
+    role: external
+    enabled: false
+  - name: rrc01
+    project: riperis
+    location: "Londres, UK (LINX)"
+    role: external
+    enabled: false
+
+  # PCH publie des relevés quotidiens (format texte "sh ip bgp", pas MRT) pour
+  # une centaine de collecteurs, dont plusieurs points d'échange africains.
+  # Format et téléchargement réels (voir etl/pch_parser.py et
+  # ingestion/broker.py::build_pch_url) ; désactivés par défaut le temps de
+  # valider le volume et la fraîcheur des données en conditions réelles.
+  - name: route-collector.jnb1.pch.net
+    project: pch
+    location: "Johannesburg, ZA (NAPAfrica)"
+    role: local
+    enabled: false
+  - name: route-collector.lgs1.pch.net
+    project: pch
+    location: "Lagos, NG"
+    role: local
+    enabled: false
