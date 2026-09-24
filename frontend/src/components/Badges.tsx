@@ -1,4 +1,17 @@
+import { Link } from "react-router-dom";
 import { CONFIDENCE_LABEL, SEVERITY_LABEL } from "../lib/format";
+
+/** AS<numéro>, avec le nom (CAIDA AS2Org) entre parenthèses quand il est
+ *  connu. De nombreux AS africains n'ont pas d'entrée AS2Org : on affiche
+ *  alors le numéro seul plutôt qu'une mention vide ou trompeuse. */
+export function AsLink({ asn, name }: { asn: number; name?: string | null }) {
+  return (
+    <Link to={`/asns/${asn}`}>
+      <span className="mono">AS{asn}</span>
+      {name ? ` (${name})` : ""}
+    </Link>
+  );
+}
 
 /** La couleur ne porte jamais l'information seule : le libellé est toujours
  *  écrit, et les trois teintes diffèrent aussi par la luminance. */

@@ -25,21 +25,6 @@ log = get_logger(__name__)
 
 FileType = Literal["rib", "updates"]
 
-# Cadence de publication par projet, en minutes.
-CADENCE: dict[str, dict[str, int]] = {
-    "routeviews": {"rib": 120, "updates": 15},
-    "riperis": {"rib": 480, "updates": 5},
-    # PCH ne publie qu'un relevé RIB complet par jour, pas de flux de mises à
-    # jour : les deux clés pointent vers la même cadence journalière.
-    "pch": {"rib": 1440, "updates": 1440},
-}
-
-ARCHIVE_ROOT = {
-    "routeviews": "https://archive.routeviews.org",
-    "riperis": "https://data.ris.ripe.net",
-    "pch": "https://downloads.pch.net/files/Routing_Data/IPv4_daily_snapshots",
-}
-
 
 @dataclass(frozen=True, slots=True)
 class MRTFile:
@@ -105,7 +90,7 @@ class BrokerClient:
                     "broker indisponible, reconstruction des URL",
                     extra={"collector": collector.name, "error": str(exc)},
                 )
-                files.extend(build_archive_urls(collector, start, end, file_type))
+                files.extend(build_archive_urls(self.settings, collector, start, end, file_type))
         return sorted(files, key=lambda f: (f.collector, f.timestamp))
 
     @staticmethod
@@ -134,15 +119,22 @@ class BrokerClient:
 
 
 def build_archive_urls(
-    collector: Collector, start: datetime, end: datetime, file_type: FileType = "updates"
+    settings: Settings,
+    collector: Collector,
+    start: datetime,
+    end: datetime,
+    file_type: FileType = "updates",
 ) -> list[MRTFile]:
     """Reconstruit les URL d'archive sans appeler de service tiers.
 
     RouteViews : ``/<collector>/bgpdata/YYYY.MM/UPDATES/updates.YYYYMMDD.HHMM.bz2``
     RIPE RIS    : ``/<rrc>/YYYY.MM/updates.YYYYMMDD.HHMM.gz``
+
+    Cadence et racine d'archive viennent de ``settings.ingestion.projects``
+    (configurables) plutôt que de constantes en dur.
     """
-    step = timedelta(minutes=CADENCE[collector.project][file_type])
-    root = ARCHIVE_ROOT[collector.project]
+    step = timedelta(minutes=settings.ingestion.cadence_minutes(collector.project, file_type))
+    root = settings.ingestion.projects[collector.project].archive_root
     files: list[MRTFile] = []
 
     cursor = _floor(start, step)

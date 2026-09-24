@@ -18,7 +18,6 @@ from abrip.logging_conf import get_logger
 
 log = get_logger(__name__)
 
-RIS_LIVE_URL = "wss://ris-live.ripe.net/v1/ws/?client=abrip"
 WINDOW = timedelta(minutes=5)
 
 
@@ -62,7 +61,9 @@ async def capture(
 
     while datetime.now(UTC) < deadline:
         try:
-            async with websockets.connect(RIS_LIVE_URL, ping_interval=20) as socket:
+            async with websockets.connect(
+                settings.ingestion.ris_live_url, ping_interval=20
+            ) as socket:
                 await socket.send(json.dumps(subscription))
                 log.info("flux RIS Live connecté", extra={"prefixes": prefixes})
 

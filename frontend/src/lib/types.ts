@@ -60,12 +60,14 @@ export interface Overview {
 
 export interface AsnSummary {
   asn: number;
+  as_name: string | null;
   country_iso2: string | null;
   is_african: boolean;
   prefixes: number;
   updates: number;
   upstream_count: number | null;
   primary_upstream: number | null;
+  primary_upstream_name: string | null;
   hhi_transit: number | null;
   open_events: number;
 }
@@ -73,6 +75,7 @@ export interface AsnSummary {
 export interface PrefixSummary {
   prefix: string;
   origin_asn: number | null;
+  origin_as_name: string | null;
   country_iso2: string | null;
   visibility_ratio: number | null;
   distinct_origins: number | null;

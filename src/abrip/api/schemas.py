@@ -71,12 +71,14 @@ class Overview(BaseModel):
 
 class AsnSummary(BaseModel):
     asn: int
+    as_name: str | None = None
     country_iso2: str | None = None
     is_african: bool = False
     prefixes: int = 0
     updates: int = 0
     upstream_count: int | None = None
     primary_upstream: int | None = None
+    primary_upstream_name: str | None = None
     hhi_transit: float | None = None
     open_events: int = 0
 
@@ -84,6 +86,7 @@ class AsnSummary(BaseModel):
 class PrefixSummary(BaseModel):
     prefix: str
     origin_asn: int | None = None
+    origin_as_name: str | None = None
     country_iso2: str | None = None
     visibility_ratio: float | None = None
     distinct_origins: int | None = None

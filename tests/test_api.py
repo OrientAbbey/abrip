@@ -92,6 +92,15 @@ class TestEvenements:
         body = client.get(f"/api/events/{event_id}/timeline").json()
         assert set(body) >= {"event", "incident", "related_events", "churn", "visibility"}
 
+    def test_horodatages_portent_le_fuseau(self, client):
+        # FR1 (revue du 24/09/2026) : un horodatage sans fuseau explicite est
+        # réinterprété en heure locale par `new Date(...)` côté navigateur.
+        # `first_seen`/`last_seen` doivent porter un offset UTC explicite.
+        item = client.get("/api/events", params={"limit": 1}).json()["items"][0]
+        for field in ("first_seen", "last_seen"):
+            value = item[field]
+            assert value.endswith("+00:00") or value.endswith("Z"), (field, value)
+
 
 @requires_data
 class TestMetriques:

@@ -65,6 +65,20 @@ class Collector(BaseModel):
     enabled: bool = True
 
 
+class ProjectDefaults(BaseModel):
+    """Cadence de publication et racine d'archive d'un projet collecteur.
+
+    Ces valeurs suivent les conventions publiques de RouteViews/RIPE
+    RIS/PCH : susceptibles d'évoluer (nouveau miroir, cadence modifiée) sans
+    changement de code, elles sont donc en configuration plutôt qu'en
+    constante — voir ``ingestion/broker.py::build_archive_urls``.
+    """
+
+    cadence_rib_minutes: int
+    cadence_updates_minutes: int
+    archive_root: str
+
+
 class IngestionSettings(BaseModel):
     broker_url: str = "https://api.bgpkit.com/v3/broker/search"
     user_agent: str = "abrip/0.1"
@@ -73,6 +87,35 @@ class IngestionSettings(BaseModel):
     concurrency: int = 3
     raw_retention_days: int = 30
     request_timeout: int = 120
+    ris_live_url: str = "wss://ris-live.ripe.net/v1/ws/?client=abrip"
+    projects: dict[str, ProjectDefaults] = Field(
+        default_factory=lambda: {
+            "routeviews": ProjectDefaults(
+                cadence_rib_minutes=120,
+                cadence_updates_minutes=15,
+                archive_root="https://archive.routeviews.org",
+            ),
+            "riperis": ProjectDefaults(
+                cadence_rib_minutes=480,
+                cadence_updates_minutes=5,
+                archive_root="https://data.ris.ripe.net",
+            ),
+            # PCH ne publie qu'un relevé RIB complet par jour, pas de flux de
+            # mises à jour : les deux cadences pointent vers la même valeur
+            # journalière (voir aussi ingestion/broker.py::CADENCE, historique).
+            "pch": ProjectDefaults(
+                cadence_rib_minutes=1440,
+                cadence_updates_minutes=1440,
+                archive_root="https://downloads.pch.net/files/Routing_Data/IPv4_daily_snapshots",
+            ),
+        }
+    )
+
+    def cadence_minutes(self, project: str, file_type: str) -> int:
+        defaults = self.projects[project]
+        return (
+            defaults.cadence_rib_minutes if file_type == "rib" else defaults.cadence_updates_minutes
+        )
 
 
 class EtlSettings(BaseModel):
@@ -90,6 +133,21 @@ class ReferenceSettings(BaseModel):
     caida_as_rel_base: str = ""
     caida_as_org_base: str = ""
     extra_african_asns: list[int] = Field(default_factory=list)
+
+
+class LoggingSettings(BaseModel):
+    """Journalisation fichier, en plus de la console (voir ``logging_conf.py``).
+
+    Le fichier reste toujours en JSON structuré, quel que soit l'affichage
+    console, pour que chaque entrée porte tous les champs ``extra`` déjà
+    fournis par les appels de journalisation existants — c'est ce qui la rend
+    exploitable (grep, ingestion par un collecteur de logs) plutôt qu'un
+    simple doublon de la console.
+    """
+
+    to_file: bool = True
+    max_bytes: int = 10_000_000
+    backup_count: int = 5
 
 
 class AnalyticsSettings(BaseModel):
@@ -124,6 +182,11 @@ class EnrichmentSettings(BaseModel):
     dataplane_enabled: bool = True
     dataplane_min_severity: str = "watch"  # ne pas dépenser d'appels réseau sur des `info`
     ioda_base_url: str = "https://api.ioda.inetintel.cc.gatech.edu/v2"
+    # Seuils de lecture des signaux de plan de données, sujets à réglage à
+    # mesure que l'expérience en conditions réelles s'accumule (voir
+    # enrichment/dataplane.py::confirm_event).
+    ioda_outage_threshold: float = 0.5  # 0 = coupure totale, 1 = normalité
+    atlas_connected_floor: float = 0.6  # sous ce ratio de sondes connectées, signal retenu
     ripe_atlas_base_url: str = "https://atlas.ripe.net/api/v2"
     # Cloudflare Radar : seule source de L1 à exiger une clé. Optionnelle par
     # nature — non configurée, elle se désactive proprement (voir
@@ -153,6 +216,7 @@ class Settings(BaseSettings):
     data_dir: Path = PROJECT_ROOT / "data"
     log_level: str = "INFO"
 
+    logging: LoggingSettings = Field(default_factory=LoggingSettings)
     ingestion: IngestionSettings = Field(default_factory=IngestionSettings)
     etl: EtlSettings = Field(default_factory=EtlSettings)
     reference: ReferenceSettings = Field(default_factory=ReferenceSettings)
@@ -195,6 +259,10 @@ class Settings(BaseSettings):
     def catalog_path(self) -> Path:
         return self.data_dir / "catalog.duckdb"
 
+    @property
+    def log_dir(self) -> Path:
+        return self.data_dir / "logs"
+
     def enabled_collectors(self, role: CollectorRole | None = None) -> list[Collector]:
         out = [c for c in self.collectors if c.enabled]
         return [c for c in out if role is None or c.role == role]
@@ -209,6 +277,7 @@ class Settings(BaseSettings):
             self.curated_dir,
             self.analytics_dir,
             self.reference_dir,
+            self.log_dir,
         ):
             path.mkdir(parents=True, exist_ok=True)
 

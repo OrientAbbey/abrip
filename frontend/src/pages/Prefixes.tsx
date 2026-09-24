@@ -2,7 +2,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useApi, useTitle } from "../lib/useApi";
 import type { Page, PrefixSummary, Series } from "../lib/types";
 import { AsyncBlock, EmptyState } from "../components/StateBlock";
-import { SeverityBadge } from "../components/Badges";
+import { SeverityBadge, AsLink } from "../components/Badges";
 import { PALETTE, TimeChart } from "../components/TimeChart";
 import { countryLabel, detectorLabel, dt, num, pct } from "../lib/format";
 
@@ -80,8 +80,8 @@ export function PrefixList() {
                         <td className="mono">
                           <Link to={`/prefixes/${encodeURIComponent(p.prefix)}`}>{p.prefix}</Link>
                         </td>
-                        <td className="mono">
-                          {p.origin_asn ? <Link to={`/asns/${p.origin_asn}`}>AS{p.origin_asn}</Link> : "—"}
+                        <td>
+                          {p.origin_asn ? <AsLink asn={p.origin_asn} name={p.origin_as_name} /> : "—"}
                         </td>
                         <td>{countryLabel(p.country_iso2)}</td>
                         <td className="num mono">{pct(p.visibility_ratio)}</td>
@@ -125,6 +125,7 @@ interface PrefixDetailData {
   prefix: string;
   origins: Array<{
     origin_asn: number;
+    as_name: string | null;
     announcements: number;
     first_seen: string;
     last_seen: string;
@@ -201,8 +202,8 @@ export function PrefixDetail() {
                       <tbody>
                         {data.origins.map((o) => (
                           <tr key={o.origin_asn}>
-                            <td className="mono">
-                              <Link to={`/asns/${o.origin_asn}`}>AS{o.origin_asn}</Link>
+                            <td>
+                              <AsLink asn={o.origin_asn} name={o.as_name} />
                             </td>
                             <td className="num mono">{num(o.announcements)}</td>
                             <td className="num mono">{num(o.peers)}</td>

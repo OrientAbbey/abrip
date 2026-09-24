@@ -209,7 +209,12 @@ def run_detection(
     detectors: list[str] | None = None,
     collectors: list[str] | None = None,
     african_only: bool = True,
+    dataplane_enabled: bool | None = None,
 ) -> dict[str, Any]:
+    """``dataplane_enabled`` outrepasse ``settings.enrichment.dataplane_enabled``
+    sans muter la configuration partagée — utile pour la démonstration, dont
+    les entités synthétiques n'ont de toute façon aucune chance d'être
+    corroborées par une source externe réelle (voir ``demo/bootstrap.py``)."""
     configs = settings.detection.get("detectors", {})
     names = detectors or list(DETECTORS)
 
@@ -235,7 +240,12 @@ def run_detection(
             per_detector[name] = len(events)
             all_events.extend(events)
 
-        if settings.enrichment.dataplane_enabled and all_events:
+        enrich = (
+            settings.enrichment.dataplane_enabled
+            if dataplane_enabled is None
+            else dataplane_enabled
+        )
+        if enrich and all_events:
             all_events = _enrich_dataplane(settings, all_events)
 
         incidents = correlate(all_events, settings.detection)
@@ -279,7 +289,15 @@ def _enrich_dataplane(settings: Settings, events: list[Event]) -> list[Event]:
                 cfg.cloudflare_radar_token, cfg.cloudflare_radar_base_url, cfg.request_timeout
             ) as radar,
         ):
-            return enrich_events(events, ioda, atlas, radar, cfg.dataplane_min_severity)
+            return enrich_events(
+                events,
+                ioda,
+                atlas,
+                radar,
+                cfg.dataplane_min_severity,
+                outage_threshold=cfg.ioda_outage_threshold,
+                connected_floor=cfg.atlas_connected_floor,
+            )
     except Exception as exc:
         log.warning("enrichissement plan de données indisponible", extra={"error": str(exc)})
         return events

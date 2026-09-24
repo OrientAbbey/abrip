@@ -344,6 +344,8 @@ def enrich_events(
     atlas: RipeAtlasClient,
     radar: CloudflareRadarClient | None = None,
     min_severity: str = "watch",
+    outage_threshold: float = IODA_OUTAGE_THRESHOLD,
+    connected_floor: float = ATLAS_CONNECTED_FLOOR,
 ) -> list[Event]:
     """Confirme chaque événement éligible et rétrograde les faux positifs probables.
 
@@ -361,7 +363,14 @@ def enrich_events(
         if order[event.severity] < floor:
             enriched.append(event)
             continue
-        report = confirm_event(event, ioda, atlas, radar)
+        report = confirm_event(
+            event,
+            ioda,
+            atlas,
+            radar,
+            outage_threshold=outage_threshold,
+            connected_floor=connected_floor,
+        )
         updated = event.model_copy(
             update={"dataplane_verdict": report.verdict, "dataplane_evidence": report.evidence}
         )

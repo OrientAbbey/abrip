@@ -60,7 +60,7 @@ def bootstrap(settings: Settings, days: int = DEFAULT_DAYS) -> dict[str, object]
         synthetic=True,
     )
     metrics = compute_all(settings, catalog, start, end)
-    detection = run_detection(settings, catalog, start, end)
+    detection = run_detection(settings, catalog, start, end, dataplane_enabled=False)
 
     truth = ground_truth()
     _write_ground_truth(settings, truth)

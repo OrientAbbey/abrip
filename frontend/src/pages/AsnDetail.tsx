@@ -2,7 +2,7 @@ import { Link, useParams } from "react-router-dom";
 import { useApi, useTitle } from "../lib/useApi";
 import type { Series } from "../lib/types";
 import { AsyncBlock } from "../components/StateBlock";
-import { SeverityBadge } from "../components/Badges";
+import { AsLink, SeverityBadge } from "../components/Badges";
 import { PALETTE, TimeChart } from "../components/TimeChart";
 import { countryLabel, day, dec, detectorLabel, dt, num } from "../lib/format";
 
@@ -18,6 +18,7 @@ interface AsnDetailData {
   }>;
   upstreams: Array<{
     primary_upstream: number | null;
+    primary_upstream_name: string | null;
     hhi_transit: number | null;
     upstream_count: number | null;
     windows: number;
@@ -51,10 +52,14 @@ export default function AsnDetail() {
           const country = (data.identity.country_iso2 as string | undefined) ?? null;
           const rir = (data.identity.rir as string | undefined) ?? null;
           const allocation = data.identity.allocation_date as string | undefined;
+          const asName = (data.identity.as_name as string | undefined) ?? null;
           return (
             <>
               <div className="page-head">
-                <h1 className="mono">AS{data.asn}</h1>
+                <h1 className="mono">
+                  AS{data.asn}
+                  {asName && <span className="muted"> ({asName})</span>}
+                </h1>
                 <div className="row" style={{ marginTop: "0.4rem" }}>
                   <span className="tag">{countryLabel(country)}</span>
                   {rir && <span className="tag">{String(rir).toUpperCase()}</span>}
@@ -110,9 +115,9 @@ export default function AsnDetail() {
                         <tbody>
                           {data.upstreams.map((u, i) => (
                             <tr key={i}>
-                              <td className="mono">
+                              <td>
                                 {u.primary_upstream ? (
-                                  <Link to={`/asns/${u.primary_upstream}`}>AS{u.primary_upstream}</Link>
+                                  <AsLink asn={u.primary_upstream} name={u.primary_upstream_name} />
                                 ) : (
                                   "—"
                                 )}

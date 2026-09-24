@@ -13,6 +13,7 @@ from __future__ import annotations
 import functools
 import time
 from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import Any
 
 import duckdb
@@ -22,6 +23,24 @@ from abrip.config import Settings, get_settings
 from abrip.logging_conf import get_logger
 
 log = get_logger(__name__)
+
+
+def _as_utc(value: Any) -> Any:
+    """Rend explicite le fuseau d'un ``datetime`` avant sérialisation JSON.
+
+    DuckDB restitue des ``datetime`` naïfs (l'horloge interne de la plateforme
+    est toujours UTC, voir ``storage/catalog.py::_utcnow``) : sans fuseau
+    explicite, le JSON produit (ex. ``"2026-09-24T10:00:00"``) est ambigu, et
+    ``new Date(...)`` côté navigateur le réinterprète en heure locale plutôt
+    qu'en UTC — chaque horodatage affiché se décale du fuseau du visiteur
+    (trouvaille FR1, revue du 24/09/2026). Fixé ici, au point unique par où
+    transitent tous les résultats DuckDB de l'API, plutôt que dans chaque
+    formatteur frontend.
+    """
+    if isinstance(value, datetime) and value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value
+
 
 # Tables exposées : nom logique -> (répertoire racine, sous-chemin)
 TABLES: dict[str, tuple[str, str]] = {
@@ -111,7 +130,10 @@ class DataAccess:
         try:
             cursor = con.execute(sql, params or [])
             columns = [d[0] for d in cursor.description]
-            return [dict(zip(columns, row, strict=True)) for row in cursor.fetchall()]
+            return [
+                {col: _as_utc(value) for col, value in zip(columns, row, strict=True)}
+                for row in cursor.fetchall()
+            ]
         finally:
             con.close()
 

@@ -1,7 +1,8 @@
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { useApi, useTitle } from "../lib/useApi";
 import type { AsnSummary, CountryRow, Page } from "../lib/types";
 import { AsyncBlock, EmptyState } from "../components/StateBlock";
+import { AsLink } from "../components/Badges";
 import { countryLabel, dec, num } from "../lib/format";
 
 const PAGE_SIZE = 25;
@@ -27,7 +28,10 @@ export default function AsnList() {
     const next = new URLSearchParams(params);
     if (value) next.set(key, value);
     else next.delete(key);
-    next.delete("offset");
+    // FR2 (revue du 24/09/2026) : ne réinitialiser l'offset que lorsqu'un
+    // *autre* filtre change — sinon les boutons Précédent/Suivant, qui
+    // posent justement `offset`, se l'effacent l'un l'autre.
+    if (key !== "offset") next.delete("offset");
     setParams(next);
   };
 
@@ -104,15 +108,19 @@ export default function AsnList() {
                   <tbody>
                     {page.items.map((a) => (
                       <tr key={a.asn}>
-                        <td className="mono">
-                          <Link to={`/asns/${a.asn}`}>AS{a.asn}</Link>
+                        <td>
+                          <AsLink asn={a.asn} name={a.as_name} />
                         </td>
                         <td>{countryLabel(a.country_iso2)}</td>
                         <td className="num mono">{num(a.prefixes)}</td>
                         <td className="num mono">{num(a.updates)}</td>
                         <td className="num mono">{num(a.upstream_count)}</td>
-                        <td className="mono">
-                          {a.primary_upstream ? `AS${a.primary_upstream}` : "—"}
+                        <td>
+                          {a.primary_upstream ? (
+                            <AsLink asn={a.primary_upstream} name={a.primary_upstream_name} />
+                          ) : (
+                            "—"
+                          )}
                         </td>
                         <td className="num mono">{dec(a.hhi_transit)}</td>
                         <td className="num mono">{num(a.open_events)}</td>

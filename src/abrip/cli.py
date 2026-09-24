@@ -39,7 +39,13 @@ console = Console()
 
 def _bootstrap_runtime():
     settings = get_settings()
-    setup_logging(settings.log_level, json_output=False)
+    setup_logging(
+        settings.log_level,
+        json_output=False,
+        log_dir=settings.log_dir if settings.logging.to_file else None,
+        max_bytes=settings.logging.max_bytes,
+        backup_count=settings.logging.backup_count,
+    )
     settings.ensure_dirs()
     from abrip.storage.catalog import Catalog
 

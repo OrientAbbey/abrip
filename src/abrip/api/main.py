@@ -43,7 +43,12 @@ def _error(status_code: int, code: str, message: str, details: dict[str, Any] | 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
-    setup_logging(settings.log_level)
+    setup_logging(
+        settings.log_level,
+        log_dir=settings.log_dir if settings.logging.to_file else None,
+        max_bytes=settings.logging.max_bytes,
+        backup_count=settings.logging.backup_count,
+    )
 
     app = FastAPI(
         title="ABRIP API",

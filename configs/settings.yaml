@@ -1,6 +1,12 @@
 data_dir: ./data
 log_level: INFO
 
+# Journalisation fichier, en plus de la console. Voir logging_conf.py.
+logging:
+  to_file: true
+  max_bytes: 10000000    # 10 Mo par fichier avant rotation
+  backup_count: 5         # fichiers .1 à .5 conservés en plus du courant
+
 ingestion:
   broker_url: https://api.bgpkit.com/v3/broker/search
   user_agent: "abrip/0.1 (African BGP Routing Intelligence Platform)"
@@ -9,6 +15,24 @@ ingestion:
   concurrency: 3
   raw_retention_days: 30
   request_timeout: 120
+  ris_live_url: "wss://ris-live.ripe.net/v1/ws/?client=abrip"
+  # Cadence de publication (minutes) et racine d'archive par projet — repli
+  # utilisé quand le broker BGPKIT est indisponible (build_archive_urls).
+  projects:
+    routeviews:
+      cadence_rib_minutes: 120
+      cadence_updates_minutes: 15
+      archive_root: https://archive.routeviews.org
+    riperis:
+      cadence_rib_minutes: 480
+      cadence_updates_minutes: 5
+      archive_root: https://data.ris.ripe.net
+    pch:
+      # PCH ne publie qu'un relevé RIB complet par jour : les deux cadences
+      # pointent vers la même valeur journalière.
+      cadence_rib_minutes: 1440
+      cadence_updates_minutes: 1440
+      archive_root: https://downloads.pch.net/files/Routing_Data/IPv4_daily_snapshots
 
 etl:
   parser: auto            # auto | bgpkit | mrtparse
@@ -50,6 +74,10 @@ enrichment:
   dataplane_enabled: true
   dataplane_min_severity: watch      # ne pas dépenser d'appels réseau sur les `info`
   ioda_base_url: https://api.ioda.inetintel.cc.gatech.edu/v2
+  # Seuils de lecture des signaux de plan de données (0 = coupure totale,
+  # 1 = normalité pour IODA ; ratio de sondes connectées pour Atlas).
+  ioda_outage_threshold: 0.5
+  atlas_connected_floor: 0.6
   ripe_atlas_base_url: https://atlas.ripe.net/api/v2
   peeringdb_base_url: https://www.peeringdb.com/api
   relationship_min_sources_for_critical: 2

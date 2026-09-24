@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -10,6 +11,28 @@ from abrip.api.deps import DataAccess, clamp_limit, get_data_access
 from abrip.api.schemas import AsnSummary, Page, PrefixSummary, SearchHit
 
 router = APIRouter(tags=["exploration"])
+
+
+def _org_names(data: DataAccess, asns: Iterable[int | None]) -> dict[int, str]:
+    """Numéro -> nom d'AS (CAIDA AS2Org), pour l'affichage « AS174 (Cogent…) ».
+
+    Meilleur effort : beaucoup d'AS africains n'ont pas d'entrée dans CAIDA
+    AS2Org — l'appelant retombe alors sur le numéro seul, sans mention (voir
+    frontend/src/components/Badges.tsx::AsLink).
+    """
+    ids = sorted({a for a in asns if a is not None})
+    if not ids or not data.exists("ref_as_org"):
+        return {}
+    placeholders = ",".join("?" * len(ids))
+    return {
+        int(r["asn"]): r["org_name"]
+        for r in data.query(
+            f"""SELECT asn, any_value(org_name) AS org_name FROM {data.table("ref_as_org")}
+                WHERE asn IN ({placeholders}) GROUP BY 1""",
+            ids,
+        )
+        if r["org_name"]
+    }
 
 
 @router.get("/asns", response_model=Page[AsnSummary], summary="Systèmes autonomes suivis")
@@ -83,20 +106,31 @@ def list_asns(
             )
         }
 
-    items = [
-        AsnSummary(
-            asn=int(r["asn"]),
-            country_iso2=r.get("country_iso2"),
-            is_african=bool(r.get("is_african")),
-            prefixes=int(r["prefixes"]),
-            updates=int(r["updates"]),
-            upstream_count=_int_or_none(up_by_asn.get(int(r["asn"]), {}).get("upstream_count")),
-            primary_upstream=_int_or_none(up_by_asn.get(int(r["asn"]), {}).get("primary_upstream")),
-            hhi_transit=_float_or_none(up_by_asn.get(int(r["asn"]), {}).get("hhi_transit")),
-            open_events=open_events.get(int(r["asn"]), 0),
+    names = _org_names(
+        data,
+        [int(r["asn"]) for r in rows]
+        + [_int_or_none(v.get("primary_upstream")) for v in up_by_asn.values()],
+    )
+
+    items = []
+    for r in rows:
+        asn = int(r["asn"])
+        primary_upstream = _int_or_none(up_by_asn.get(asn, {}).get("primary_upstream"))
+        items.append(
+            AsnSummary(
+                asn=asn,
+                as_name=names.get(asn),
+                country_iso2=r.get("country_iso2"),
+                is_african=bool(r.get("is_african")),
+                prefixes=int(r["prefixes"]),
+                updates=int(r["updates"]),
+                upstream_count=_int_or_none(up_by_asn.get(asn, {}).get("upstream_count")),
+                primary_upstream=primary_upstream,
+                primary_upstream_name=names.get(primary_upstream) if primary_upstream else None,
+                hhi_transit=_float_or_none(up_by_asn.get(asn, {}).get("hhi_transit")),
+                open_events=open_events.get(asn, 0),
+            )
         )
-        for r in rows
-    ]
     return Page[AsnSummary](items=items, total=total, limit=limit, offset=offset)
 
 
@@ -142,6 +176,12 @@ def asn_detail(asn: int, data: DataAccess = Depends(get_data_access)) -> dict:
                 WHERE list_contains(asns_involved, ?) ORDER BY first_seen DESC LIMIT 50""",
             [asn],
         )
+
+    names = _org_names(data, [asn, *(_int_or_none(u["primary_upstream"]) for u in upstreams)])
+    identity["as_name"] = names.get(asn)
+    for row in upstreams:
+        up = _int_or_none(row["primary_upstream"])
+        row["primary_upstream_name"] = names.get(up) if up else None
 
     return {
         "asn": asn,
@@ -192,10 +232,13 @@ def list_prefixes(
             )
         }
 
+    names = _org_names(data, [_int_or_none(r["origin_asn"]) for r in rows])
+
     items = [
         PrefixSummary(
             prefix=r["prefix"],
-            origin_asn=_int_or_none(r["origin_asn"]),
+            origin_asn=(origin_asn := _int_or_none(r["origin_asn"])),
+            origin_as_name=names.get(origin_asn) if origin_asn else None,
             visibility_ratio=visibility.get(r["prefix"]),
             distinct_origins=int(r["distinct_origins"]),
             updates=int(r["updates"]),
@@ -247,6 +290,11 @@ def prefix_detail(prefix: str, data: DataAccess = Depends(get_data_access)) -> d
             f"SELECT prefix, asn, max_len, ta FROM {data.table('ref_roa')} WHERE prefix = ?",
             [prefix],
         )
+
+    names = _org_names(data, [_int_or_none(o["origin_asn"]) for o in origins])
+    for row in origins:
+        origin = _int_or_none(row["origin_asn"])
+        row["as_name"] = names.get(origin) if origin is not None else None
 
     events = []
     if data.exists("events"):
