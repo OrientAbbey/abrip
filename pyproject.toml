@@ -71,3 +71,10 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+# Starlette déprécie l'usage d'httpx avec TestClient (invitation à migrer vers
+# httpx2). C'est un bruit tiers à l'import de fastapi.testclient : on ne peut
+# pas le faire disparaître côté projet, on le filtre pour ne pas masquer de
+# vrais avertissements.
+filterwarnings = [
+  "ignore:Using .*httpx.*with .*starlette.testclient.* is deprecated:DeprecationWarning",
+]

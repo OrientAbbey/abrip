@@ -93,6 +93,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         log.exception("erreur non gérée sur %s", request.url.path)
         return _error(500, "internal_error", "Erreur interne du service.")
 
+    # 404 normalisé pour les routes API inconnues. Indispensable aussi quand le
+    # frontend n'est pas compilé : sans catch-all, Starlette renvoie son format
+    # par défaut ``{"detail": ...}`` au lieu du contrat ``{"error": ...}``.
+    @app.get("/api/{path:path}", include_in_schema=False)
+    async def api_not_found(path: str):
+        return _error(404, "not_found", f"Route inconnue : /api/{path}")
+
     _mount_frontend(app, settings)
     return app
 
