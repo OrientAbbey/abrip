@@ -15,10 +15,22 @@ import polars as pl
 from abrip.analytics.metrics import compute_all
 from abrip.anomaly.engine import run_detection
 from abrip.config import Settings
-from abrip.demo.generator import BASE_DATE, DEFAULT_DAYS, ground_truth, reference_frames
+from abrip.demo.generator import (
+    BASE_DATE,
+    DEFAULT_DAYS,
+    ground_truth,
+    reference_frames,
+    reference_history_frames,
+)
 from abrip.etl.curate import curate_range
 from abrip.logging_conf import get_logger
-from abrip.models import REF_AS_ORG_SCHEMA, REF_AS_REL_SCHEMA, REF_ASN_SCHEMA, REF_ROA_SCHEMA
+from abrip.models import (
+    REF_AS_ORG_SCHEMA,
+    REF_AS_REL_SCHEMA,
+    REF_ASN_SCHEMA,
+    REF_IRR_ROUTE_SCHEMA,
+    REF_ROA_SCHEMA,
+)
 from abrip.storage.catalog import Catalog
 from abrip.storage.parquet import write_frame
 
@@ -29,15 +41,41 @@ SCHEMAS = {
     "ref_roa": REF_ROA_SCHEMA,
     "ref_as_rel": REF_AS_REL_SCHEMA,
     "ref_as_org": REF_AS_ORG_SCHEMA,
+    "ref_irr_route": REF_IRR_ROUTE_SCHEMA,
 }
 
+# Tables sujettes à churn, historisées jour par jour en plus de leur
+# instantané "courant" — voir demo.generator.reference_history_frames et
+# reference.history (diff New/Left/Unstable).
+HISTORY_TABLES = ("ref_as_rel", "ref_roa", "ref_irr_route")
 
-def write_reference(settings: Settings) -> dict[str, int]:
+
+def write_reference(settings: Settings, days: int = DEFAULT_DAYS) -> dict[str, int]:
+    """Écrit l'instantané courant de chaque référentiel, plus un historique
+    quotidien pour ``HISTORY_TABLES`` — nécessaire aux onglets New/Left/
+    Unstable de la page ASN (voir ``reference/history.py``).
+
+    ``ref_asn``/``ref_as_org`` restent un instantané unique : ils ne varient
+    pas assez souvent en réalité pour justifier un historique ici.
+    """
     written: dict[str, int] = {}
-    for name, rows in reference_frames().items():
-        frame = pl.DataFrame(rows, schema=SCHEMAS[name], strict=False)
+
+    base = reference_frames()
+    for name in ("ref_asn", "ref_as_org"):
+        frame = pl.DataFrame(base[name], schema=SCHEMAS[name], strict=False)
         write_frame(frame, settings.reference_dir / name)
         written[name] = frame.height
+
+    history = reference_history_frames(BASE_DATE, days)
+    last_day = max(history["ref_as_rel"])
+    for name in HISTORY_TABLES:
+        for day, rows in history[name].items():
+            frame = pl.DataFrame(rows, schema=SCHEMAS[name], strict=False)
+            write_frame(frame, settings.reference_dir / "history" / name / f"date={day}")
+        latest = pl.DataFrame(history[name][last_day], schema=SCHEMAS[name], strict=False)
+        write_frame(latest, settings.reference_dir / name)
+        written[name] = latest.height
+
     return written
 
 
@@ -48,7 +86,7 @@ def bootstrap(settings: Settings, days: int = DEFAULT_DAYS) -> dict[str, object]
     start = BASE_DATE.date()
     end = start + timedelta(days=days - 1)
 
-    reference = write_reference(settings)
+    reference = write_reference(settings, days)
     log.info("référentiels de démonstration écrits", extra=reference)
 
     curated = curate_range(

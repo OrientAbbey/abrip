@@ -10,12 +10,14 @@ import polars as pl
 import pytest
 
 from abrip.models import Relationship, RpkiStatus
+from abrip.reference.history import diff_entities
 from abrip.reference.relationships import (
     RelationshipIndex,
     classify_path,
     valley_free_violation,
 )
 from abrip.reference.rpki import RpkiValidator, parse_roa_payload
+from abrip.storage.parquet import write_frame
 
 
 @pytest.fixture
@@ -111,3 +113,47 @@ class TestValleyFree:
 
     def test_fournisseurs_connus(self, index):
         assert index.providers_of(36800) == {174, 3320}
+
+
+class TestHistory:
+    """Diff de référentiel historisé — voir reference/history.py."""
+
+    def _write_day(self, reference_dir, table, day, rows):
+        schema = {"prefix": pl.Utf8, "asn": pl.UInt32, "snapshot_date": pl.Utf8}
+        frame = pl.DataFrame(
+            [{**r, "snapshot_date": day} for r in rows], schema=schema, strict=False
+        )
+        write_frame(frame, reference_dir / "history" / table / f"date={day}")
+
+    def test_classement_new_left_unstable_stable(self, tmp_path):
+        days = ["2026-01-01", "2026-01-02", "2026-01-03", "2026-01-04"]
+        stable = {"prefix": "STABLE/24", "asn": 9}
+        new = {"prefix": "NEW/24", "asn": 2}
+        left = {"prefix": "LEFT/24", "asn": 3}
+        unstable = {"prefix": "UNSTABLE/24", "asn": 1}
+
+        # stable : les 4 jours. new : jours 3-4 seulement. left : jours 1-2
+        # seulement. unstable : présente, absente, présente, présente (un
+        # aller-retour au jour 2->3).
+        rows_by_day = {
+            days[0]: [stable, left, unstable],
+            days[1]: [stable, left],
+            days[2]: [stable, new],
+            days[3]: [stable, new, unstable],
+        }
+        for day in days:
+            self._write_day(tmp_path, "ref_roa", day, rows_by_day[day])
+
+        result = {
+            (r["prefix"], r["asn"]): r["change"]
+            for r in diff_entities(tmp_path, "ref_roa", ["prefix", "asn"], days[0], days[-1])
+        }
+        assert result[("STABLE/24", 9)] == "stable"
+        assert result[("NEW/24", 2)] == "new"
+        assert result[("LEFT/24", 3)] == "left"
+        assert result[("UNSTABLE/24", 1)] == "unstable"
+
+    def test_fenetre_sans_historique_renvoie_vide(self, tmp_path):
+        assert (
+            diff_entities(tmp_path, "ref_roa", ["prefix", "asn"], "2026-01-01", "2026-01-04") == []
+        )

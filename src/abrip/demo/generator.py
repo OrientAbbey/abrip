@@ -416,6 +416,115 @@ def reference_frames(snapshot_date: str = "2026-08-30") -> dict[str, list[dict[s
     return {"ref_asn": asns, "ref_roa": roas, "ref_as_rel": relations, "ref_as_org": as_org}
 
 
+# Motif de présence jour par jour pour les trois entités "à churn" de chaque
+# table historisée ci-dessous — jour 0 = premier jour de la fenêtre de démo.
+# Sert à donner aux onglets New/Left/Unstable (point 6, 25/09/2026) quelque
+# chose à montrer : sans ça, aucune des trois classes n'aurait d'exemple en
+# démo, faute d'historique jour par jour dans reference_frames() ci-dessus,
+# qui n'écrit qu'un instantané unique (le dernier jour de la fenêtre).
+_NEW_DAYS = {4, 5, 6}  # absente en début de fenêtre, apparaît le jour 4
+_LEFT_DAYS = {0, 1, 2, 3}  # présente en début de fenêtre, disparaît le jour 4
+_UNSTABLE_DAYS = {0, 2, 4, 6}  # alterne présente/absente
+
+
+def _irr_route_frame(snapshot_date: str) -> list[dict[str, Any]]:
+    """Fond IRR constant : un objet route par préfixe africain, chez RADB.
+
+    N'existe pas encore dans reference_frames() (aucun test n'en dépend) :
+    ajouté ici pour donner un fond à l'historique de la Phase 6, avec le même
+    instantané que ref_roa pour rester simple.
+    """
+    return [
+        {"prefix": prefix, "asn": a.asn, "source": "RADB", "snapshot_date": snapshot_date}
+        for a in AFRICAN_ASNS
+        for prefix in a.prefixes
+    ]
+
+
+def reference_history_frames(
+    start: datetime, days: int = DEFAULT_DAYS
+) -> dict[str, dict[str, list[dict[str, Any]]]]:
+    """Un instantané par jour de ``ref_as_rel``/``ref_roa``/``ref_irr_route``.
+
+    ``ref_asn``/``ref_as_org`` ne varient pas assez souvent dans la réalité
+    pour justifier un historique ici ; seules ces trois tables reçoivent un
+    instantané quotidien, chacune avec trois entités qui apparaissent,
+    disparaissent ou flappent sur la fenêtre (voir les motifs ci-dessus), en
+    plus d'un fond commun présent tous les jours. Le dernier jour reste
+    identique à ``reference_frames()`` : c'est la même fin de fenêtre.
+    """
+    last_day = (start + timedelta(days=days - 1)).date().isoformat()
+    base = reference_frames(snapshot_date=last_day)
+
+    churn_rel = {
+        "new": {"as_a": 2914, "as_b": 37200, "relationship": "p2c", "source": "synthetic"},
+        "left": {"as_a": 6939, "as_b": 37400, "relationship": "p2c", "source": "synthetic"},
+        "unstable": {"as_a": 174, "as_b": 3320, "relationship": "p2p", "source": "synthetic"},
+    }
+    churn_roa = {
+        "new": {"prefix": "102.64.0.0/16", "asn": 36700, "max_len": 18, "ta": "afrinic"},
+        "left": {"prefix": "197.32.0.0/13", "asn": 37500, "max_len": 15, "ta": "afrinic"},
+        "unstable": {"prefix": "196.1.96.0/20", "asn": 36900, "max_len": 22, "ta": "afrinic"},
+    }
+    # Un second registre IRR ("AFRINIC" plutôt que "RADB", le fond commun de
+    # _irr_route_frame) : les churn_irr ne recouvrent donc jamais une ligne du
+    # fond, pas besoin de la filtrer.
+    churn_irr = {
+        "new": {"prefix": "102.176.0.0/14", "asn": 36800, "source": "AFRINIC"},
+        "left": {"prefix": "105.184.0.0/13", "asn": 37400, "source": "AFRINIC"},
+        "unstable": {"prefix": "197.210.0.0/15", "asn": 36700, "source": "AFRINIC"},
+    }
+
+    # "left"/"unstable" désignent une entité qui existe déjà dans le fond
+    # commun : on la retire du fond avant de la réinjecter uniquement les
+    # jours où le motif de présence le prévoit (voir plus bas), sans quoi
+    # elle apparaîtrait en double les jours où les deux coïncident.
+    rel_base = [
+        r
+        for r in base["ref_as_rel"]
+        if (r["as_a"], r["as_b"])
+        not in {(churn_rel["left"]["as_a"], churn_rel["left"]["as_b"])}
+        | {(churn_rel["unstable"]["as_a"], churn_rel["unstable"]["as_b"])}
+    ]
+    roa_base = [
+        r
+        for r in base["ref_roa"]
+        if (r["prefix"], r["asn"])
+        not in {(churn_roa["left"]["prefix"], churn_roa["left"]["asn"])}
+        | {(churn_roa["unstable"]["prefix"], churn_roa["unstable"]["asn"])}
+    ]
+    irr_base = _irr_route_frame(last_day)
+
+    present_days = {"new": _NEW_DAYS, "left": _LEFT_DAYS, "unstable": _UNSTABLE_DAYS}
+    out: dict[str, dict[str, list[dict[str, Any]]]] = {
+        "ref_as_rel": {},
+        "ref_roa": {},
+        "ref_irr_route": {},
+    }
+    for offset in range(days):
+        day = (start + timedelta(days=offset)).date().isoformat()
+
+        rel_rows = list(rel_base)
+        for label, extra in churn_rel.items():
+            if offset in present_days[label]:
+                rel_rows.append(extra)
+        out["ref_as_rel"][day] = [{**r, "snapshot_date": day} for r in rel_rows]
+
+        roa_rows = list(roa_base)
+        for label, extra in churn_roa.items():
+            if offset in present_days[label]:
+                roa_rows.append(extra)
+        out["ref_roa"][day] = [{**r, "snapshot_date": day} for r in roa_rows]
+
+        irr_rows = list(irr_base)
+        for label, extra in churn_irr.items():
+            if offset in present_days[label]:
+                irr_rows.append(extra)
+        out["ref_irr_route"][day] = [{**r, "snapshot_date": day} for r in irr_rows]
+
+    return out
+
+
 def ground_truth() -> list[dict[str, Any]]:
     """Vérité terrain : ce que la détection doit retrouver."""
     return [
