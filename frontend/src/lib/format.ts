@@ -53,6 +53,24 @@ export const DETECTOR_LABEL: Record<string, string> = {
 
 export const detectorLabel = (key: string): string => DETECTOR_LABEL[key] ?? key;
 
+export const CHANGE_LABEL: Record<string, string> = {
+  new: "Nouveau",
+  left: "Disparu",
+  unstable: "Instable",
+  stable: "Stable",
+};
+
+export const changeLabel = (key: string): string => CHANGE_LABEL[key] ?? key;
+
+export const RELATION_LABEL: Record<string, string> = {
+  providers: "Fournisseurs",
+  customers: "Clients",
+  peerings: "Peerings",
+  unspecified: "Non déterminé",
+};
+
+export const relationLabel = (key: string): string => RELATION_LABEL[key] ?? key;
+
 export const COUNTRY_LABEL: Record<string, string> = {
   CM: "Cameroun",
   SN: "Sénégal",

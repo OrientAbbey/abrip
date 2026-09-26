@@ -2,37 +2,14 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from abrip.api.deps import DataAccess, clamp_limit, get_data_access
+from abrip.api.deps import DataAccess, clamp_limit, get_data_access, org_names
 from abrip.api.schemas import AsnSummary, Page, PrefixSummary, SearchHit
 
 router = APIRouter(tags=["exploration"])
-
-
-def _org_names(data: DataAccess, asns: Iterable[int | None]) -> dict[int, str]:
-    """Numéro -> nom d'AS (CAIDA AS2Org), pour l'affichage « AS174 (Cogent…) ».
-
-    Meilleur effort : beaucoup d'AS africains n'ont pas d'entrée dans CAIDA
-    AS2Org — l'appelant retombe alors sur le numéro seul, sans mention (voir
-    frontend/src/components/Badges.tsx::AsLink).
-    """
-    ids = sorted({a for a in asns if a is not None})
-    if not ids or not data.exists("ref_as_org"):
-        return {}
-    placeholders = ",".join("?" * len(ids))
-    return {
-        int(r["asn"]): r["org_name"]
-        for r in data.query(
-            f"""SELECT asn, any_value(org_name) AS org_name FROM {data.table("ref_as_org")}
-                WHERE asn IN ({placeholders}) GROUP BY 1""",
-            ids,
-        )
-        if r["org_name"]
-    }
 
 
 @router.get("/asns", response_model=Page[AsnSummary], summary="Systèmes autonomes suivis")
@@ -106,7 +83,7 @@ def list_asns(
             )
         }
 
-    names = _org_names(
+    names = org_names(
         data,
         [int(r["asn"]) for r in rows]
         + [_int_or_none(v.get("primary_upstream")) for v in up_by_asn.values()],
@@ -177,7 +154,7 @@ def asn_detail(asn: int, data: DataAccess = Depends(get_data_access)) -> dict:
             [asn],
         )
 
-    names = _org_names(data, [asn, *(_int_or_none(u["primary_upstream"]) for u in upstreams)])
+    names = org_names(data, [asn, *(_int_or_none(u["primary_upstream"]) for u in upstreams)])
     identity["as_name"] = names.get(asn)
     for row in upstreams:
         up = _int_or_none(row["primary_upstream"])
@@ -232,7 +209,7 @@ def list_prefixes(
             )
         }
 
-    names = _org_names(data, [_int_or_none(r["origin_asn"]) for r in rows])
+    names = org_names(data, [_int_or_none(r["origin_asn"]) for r in rows])
 
     items = [
         PrefixSummary(
@@ -291,7 +268,7 @@ def prefix_detail(prefix: str, data: DataAccess = Depends(get_data_access)) -> d
             [prefix],
         )
 
-    names = _org_names(data, [_int_or_none(o["origin_asn"]) for o in origins])
+    names = org_names(data, [_int_or_none(o["origin_asn"]) for o in origins])
     for row in origins:
         origin = _int_or_none(row["origin_asn"])
         row["as_name"] = names.get(origin) if origin is not None else None

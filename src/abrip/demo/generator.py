@@ -152,6 +152,27 @@ def _origin_path(asn: SyntheticAsn, peer: int, rng: random.Random) -> list[int]:
     return [peer, rng.choice(asn.upstreams), upstream, asn.asn]
 
 
+# Motif de présence jour par jour pour les entités "à churn" plus bas dans ce
+# fichier — jour 0 = premier jour de la fenêtre de démo. Sert à donner aux
+# onglets New/Left/Unstable (point 6, 25/09/2026) quelque chose à montrer :
+# sans ça, aucune des trois classes n'aurait d'exemple en démo.
+_NEW_DAYS = {4, 5, 6}  # absente en début de fenêtre, apparaît le jour 4
+_LEFT_DAYS = {0, 1, 2, 3}  # présente en début de fenêtre, disparaît le jour 4
+_UNSTABLE_DAYS = {0, 2, 4, 6}  # alterne présente/absente
+
+# Même principe que ci-dessus, mais au niveau des annonces BGP elles-mêmes
+# (pas seulement des référentiels ROA/IRR/relations) : pour que l'onglet
+# Préfixes de la fiche ASN ait, lui aussi, un New/Left/Unstable observable.
+# Choisis pour ne recouper aucune anomalie plantée (PLANTED ci-dessus) ni
+# aucune entité de reference_history_frames, afin que les deux mécanismes
+# restent lisibles indépendamment l'un de l'autre.
+_BGP_PREFIX_CHURN: dict[tuple[int, str], set[int]] = {
+    (37200, "196.216.32.0/20"): _NEW_DAYS,
+    (37105, "102.22.8.0/22"): _LEFT_DAYS,  # 37100 continue de l'annoncer, lui
+    (36900, "105.16.0.0/16"): _UNSTABLE_DAYS,
+}
+
+
 def generate_day(
     collector: str, day: datetime, seed: int = 42, source_file: str = "synthetic"
 ) -> Iterator[dict[str, Any]]:
@@ -179,6 +200,9 @@ def generate_day(
         for operator in AFRICAN_ASNS:
             for prefix in operator.prefixes:
                 if prefix in hidden:
+                    continue
+                active_days = _BGP_PREFIX_CHURN.get((operator.asn, prefix))
+                if active_days is not None and day_offset not in active_days:
                     continue
                 boost = next(
                     (
@@ -414,17 +438,6 @@ def reference_frames(snapshot_date: str = "2026-08-30") -> dict[str, list[dict[s
     ]
 
     return {"ref_asn": asns, "ref_roa": roas, "ref_as_rel": relations, "ref_as_org": as_org}
-
-
-# Motif de présence jour par jour pour les trois entités "à churn" de chaque
-# table historisée ci-dessous — jour 0 = premier jour de la fenêtre de démo.
-# Sert à donner aux onglets New/Left/Unstable (point 6, 25/09/2026) quelque
-# chose à montrer : sans ça, aucune des trois classes n'aurait d'exemple en
-# démo, faute d'historique jour par jour dans reference_frames() ci-dessus,
-# qui n'écrit qu'un instantané unique (le dernier jour de la fenêtre).
-_NEW_DAYS = {4, 5, 6}  # absente en début de fenêtre, apparaît le jour 4
-_LEFT_DAYS = {0, 1, 2, 3}  # présente en début de fenêtre, disparaît le jour 4
-_UNSTABLE_DAYS = {0, 2, 4, 6}  # alterne présente/absente
 
 
 def _irr_route_frame(snapshot_date: str) -> list[dict[str, Any]]:

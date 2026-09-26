@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from abrip import __version__
-from abrip.api.routers import events, explore, metrics, system
+from abrip.api.routers import events, explore, metrics, system, topology
 from abrip.config import Settings, get_settings
 from abrip.logging_conf import get_logger, setup_logging
 
@@ -68,7 +68,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             allow_headers=["*"],
         )
 
-    for router in (system.router, explore.router, metrics.router, events.router):
+    # topology avant explore : ses routes /prefixes/{prefix:path}/roa-history
+    # etc. sont plus spécifiques que le /prefixes/{prefix:path} générique
+    # d'explore, mais Starlette ne résout pas par spécificité — seulement par
+    # ordre d'enregistrement (premier motif qui correspond, gagne).
+    for router in (system.router, topology.router, explore.router, metrics.router, events.router):
         app.include_router(router, prefix="/api")
 
     # --- erreurs normalisées ------------------------------------------------

@@ -42,23 +42,25 @@ def diff_entities(
     key_columns: Sequence[str],
     start: str,
     end: str,
+    filters: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Une ligne par entité distincte vue sur ``[start, end]``.
 
     Chaque ligne porte les colonnes de ``key_columns``, plus ``change``
     (``new``/``left``/``unstable``/``stable``), ``first_seen`` et
-    ``last_seen`` (dates d'instantané, pas d'horodatages).
+    ``last_seen`` (dates d'instantané, pas d'horodatages). ``filters``
+    restreint aux lignes égales à la valeur donnée pour chaque colonne
+    (ex. ``{"prefix": "197.155.64.0/22"}``), appliqué avant le diff plutôt
+    qu'après pour ne jamais charger plus que nécessaire.
     """
     dates = snapshot_dates(reference_dir, table, start, end)
     if not dates:
         return []
 
-    frame = (
-        read_partitions(reference_dir / "history", table, date_from=dates[0], date_to=dates[-1])
-        .select([*key_columns, "snapshot_date"])
-        .unique()
-        .collect()
-    )
+    scan = read_partitions(reference_dir / "history", table, date_from=dates[0], date_to=dates[-1])
+    for column, value in (filters or {}).items():
+        scan = scan.filter(pl.col(column) == value)
+    frame = scan.select([*key_columns, "snapshot_date"]).unique().collect()
     if frame.is_empty():
         return []
 
@@ -68,16 +70,22 @@ def diff_entities(
     out: list[dict[str, Any]] = []
     for row in grouped.iter_rows(named=True):
         seen: list[str] = row["seen_on"]
-        change = _classify(seen, dates, first_day, last_day)
+        change = classify_presence(seen, dates, first_day, last_day)
         key = {k: row[k] for k in key_columns}
         out.append({**key, "change": change, "first_seen": seen[0], "last_seen": seen[-1]})
     return out
 
 
-def _classify(seen: list[str], all_dates: list[str], first_day: str, last_day: str) -> str:
+def classify_presence(seen: list[str], all_dates: list[str], first_day: str, last_day: str) -> str:
+    """``new``/``left``/``unstable``/``stable`` à partir des jours de présence.
+
+    Générique : ``all_dates`` n'a pas besoin de venir d'un instantané de
+    référentiel — la Phase 1 du point 6 (25/09/2026) l'applique aussi aux
+    préfixes observés dans les données BGP curées.
+    """
     if len(seen) == len(all_dates):
         return "stable"
-    if _reappearances(seen, all_dates) >= 1:
+    if count_reappearances(seen, all_dates) >= 1:
         return "unstable"
     present_start, present_end = first_day in seen, last_day in seen
     if not present_start and present_end:
@@ -87,7 +95,7 @@ def _classify(seen: list[str], all_dates: list[str], first_day: str, last_day: s
     return "unstable"  # apparue puis disparue entièrement dans la fenêtre
 
 
-def _reappearances(seen: list[str], all_dates: list[str]) -> int:
+def count_reappearances(seen: list[str], all_dates: list[str]) -> int:
     """Nombre de fois où l'entité redevient présente après une absence qui
     suivait une présence — 0 si elle n'a jamais disparu puis réapparu."""
     seen_set = set(seen)

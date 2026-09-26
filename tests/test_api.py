@@ -149,6 +149,104 @@ class TestExploration:
         assert any(hit["kind"] in {"asn", "prefix"} for hit in hits)
 
 
+@requires_data
+class TestTopologie:
+    """Point 6, lot 2 : onglets Préfixes/Voisins BGP de la fiche ASN."""
+
+    def test_serie_temporelle_prefixes(self, client):
+        asn = client.get("/api/asns", params={"limit": 1}).json()["items"][0]["asn"]
+        body = client.get(f"/api/asns/{asn}/prefixes/timeseries").json()
+        assert body["points"], "au moins un point sur la fenêtre de démonstration"
+        assert all({"day", "prefixes"} <= set(p) for p in body["points"])
+
+    def test_serie_temporelle_filtree_par_famille(self, client):
+        asn = client.get("/api/asns", params={"limit": 1}).json()["items"][0]["asn"]
+        v4 = client.get(f"/api/asns/{asn}/prefixes/timeseries", params={"family": "4"}).json()
+        v6 = client.get(f"/api/asns/{asn}/prefixes/timeseries", params={"family": "6"}).json()
+        # Les deux familles ne peuvent pas dépasser, ensemble, le total "all".
+        total = client.get(f"/api/asns/{asn}/prefixes/timeseries").json()
+        by_day = {p["day"]: p["prefixes"] for p in total["points"]}
+        for p in v4["points"] + v6["points"]:
+            assert p["prefixes"] <= by_day.get(p["day"], 0)
+
+    def test_prefixes_change_new_left_unstable(self, client):
+        # Données synthétiques fixes du générateur de démo (voir
+        # demo/generator.py::_BGP_PREFIX_CHURN) : AS37200 gagne un nouveau
+        # préfixe le jour 4 ("new"), AS37105 cesse d'annoncer le sien après
+        # le jour 3 ("left"), AS36900 en a un qui flappe ("unstable").
+        new = client.get("/api/asns/37200/prefixes/changes").json()["items"]
+        assert new == [
+            {
+                "prefix": "196.216.32.0/20",
+                "active": True,
+                "change": "new",
+                "first_seen": "2026-08-28",
+                "last_seen": "2026-08-30",
+                "has_roa": True,
+                "has_route_object": True,
+            }
+        ]
+
+        left = client.get("/api/asns/37105/prefixes/changes").json()["items"]
+        assert len(left) == 1
+        assert left[0]["change"] == "left"
+        assert left[0]["active"] is False
+
+        unstable = client.get("/api/asns/36900/prefixes/changes").json()["items"]
+        changes = {item["prefix"]: item["change"] for item in unstable}
+        assert changes["105.16.0.0/16"] == "unstable"
+        assert changes["196.1.96.0/20"] == "stable"
+
+    def test_changements_prefixes_filtre_par_onglet(self, client):
+        asn = client.get("/api/asns", params={"limit": 1}).json()["items"][0]["asn"]
+        for tab in ("new", "left", "unstable"):
+            body = client.get(f"/api/asns/{asn}/prefixes/changes", params={"tab": tab}).json()
+            assert all(item["change"] == tab for item in body["items"])
+
+    def test_voisins_par_relation(self, client):
+        # AS37400 (trois fournisseurs synthétiques) a une diversité de
+        # relations suffisante pour exercer les quatre onglets.
+        allowed = {"all", "providers", "customers", "peerings", "unspecified"}
+        tout = client.get("/api/asns/37400/neighbors").json()["items"]
+        assert tout, "AS37400 doit avoir au moins un voisin observé"
+        seen_relations = set()
+        for item in tout:
+            assert {
+                "asn",
+                "relation",
+                "active",
+                "has_v4",
+                "has_v6",
+                "first_seen",
+                "last_seen",
+            } <= set(item)
+            seen_relations.add(item["relation"])
+        assert seen_relations <= allowed - {"all"}
+
+        providers = client.get(
+            "/api/asns/37400/neighbors", params={"relation": "providers"}
+        ).json()["items"]
+        assert all(item["relation"] == "providers" for item in providers)
+        assert {item["asn"] for item in providers} <= {item["asn"] for item in tout}
+
+    def test_historique_roa_dun_prefixe(self, client):
+        # 197.32.0.0/13 (AS37500) : ROA présente en début de fenêtre,
+        # retirée le jour 4 -> "left".
+        body = client.get("/api/prefixes/197.32.0.0%2F13/roa-history").json()
+        assert body["items"]
+        row = next(r for r in body["items"] if r["asn"] == 37500)
+        assert row["change"] == "left"
+        assert {"prefix", "asn", "max_len", "ta", "first_seen", "last_seen", "match"} <= set(row)
+
+    def test_historique_objet_route_dun_prefixe(self, client):
+        # 105.184.0.0/13 (AS37400) : objet IRR "AFRINIC" retiré le jour 4,
+        # l'objet "RADB" de base reste stable — les deux sources coexistent.
+        body = client.get("/api/prefixes/105.184.0.0%2F13/route-object-history").json()
+        changes = {(r["source"], r["change"]) for r in body["items"]}
+        assert ("AFRINIC", "left") in changes
+        assert ("RADB", "stable") in changes
+
+
 class TestErreurs:
     def test_route_api_inconnue(self, client):
         response = client.get("/api/route-qui-nexiste-pas")

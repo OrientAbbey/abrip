@@ -3,6 +3,8 @@ import { useApi, useTitle } from "../lib/useApi";
 import type { Series } from "../lib/types";
 import { AsyncBlock } from "../components/StateBlock";
 import { AsLink, SeverityBadge } from "../components/Badges";
+import { AsnPrefixesPanel } from "../components/AsnPrefixesPanel";
+import { AsnNeighborsPanel } from "../components/AsnNeighborsPanel";
 import { PALETTE, TimeChart } from "../components/TimeChart";
 import { countryLabel, day, dec, detectorLabel, dt, num } from "../lib/format";
 
@@ -137,6 +139,9 @@ export default function AsnDetail() {
                   </p>
                 </section>
               </div>
+
+              <AsnPrefixesPanel asn={data.asn} />
+              <AsnNeighborsPanel asn={data.asn} />
 
               <section className="card">
                 <h2>Activité dans le temps</h2>

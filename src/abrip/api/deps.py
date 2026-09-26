@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import functools
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from datetime import UTC, datetime
 from typing import Any
 
@@ -180,3 +180,26 @@ def verify_api_key(x_api_key: str | None = Header(default=None)) -> None:
 
 def clamp_limit(limit: int) -> int:
     return max(1, min(limit, get_settings().api.max_page_size))
+
+
+def org_names(data: DataAccess, asns: Iterable[int | None]) -> dict[int, str]:
+    """Numéro -> nom d'AS (CAIDA AS2Org), pour l'affichage « AS174 (Cogent…) ».
+
+    Meilleur effort : beaucoup d'AS africains n'ont pas d'entrée dans CAIDA
+    AS2Org — l'appelant retombe alors sur le numéro seul, sans mention (voir
+    frontend/src/components/Badges.tsx::AsLink). Partagé entre les routeurs
+    exploration et topologie plutôt que dupliqué.
+    """
+    ids = sorted({a for a in asns if a is not None})
+    if not ids or not data.exists("ref_as_org"):
+        return {}
+    placeholders = ",".join("?" * len(ids))
+    return {
+        int(r["asn"]): r["org_name"]
+        for r in data.query(
+            f"""SELECT asn, any_value(org_name) AS org_name FROM {data.table("ref_as_org")}
+                WHERE asn IN ({placeholders}) GROUP BY 1""",
+            ids,
+        )
+        if r["org_name"]
+    }

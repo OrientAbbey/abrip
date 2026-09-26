@@ -168,3 +168,74 @@ export interface Facets {
   country_iso2: Record<string, number>;
   confidence: Record<string, number>;
 }
+
+// --- Point 6 : onglets Préfixes / Voisins BGP de la fiche ASN --------------
+
+export interface PrefixTimeseries {
+  asn: number;
+  family: "all" | "4" | "6";
+  points: Array<{ day: string; prefixes: number }>;
+}
+
+export type ChangeKind = "new" | "left" | "unstable" | "stable";
+
+export interface PrefixChangeItem {
+  prefix: string;
+  active: boolean;
+  change: ChangeKind;
+  first_seen: string;
+  last_seen: string;
+  has_roa: boolean;
+  has_route_object: boolean;
+}
+
+export interface PrefixChanges {
+  asn: number;
+  start: string | null;
+  end: string | null;
+  items: PrefixChangeItem[];
+}
+
+export type NeighborRelation = "providers" | "customers" | "peerings" | "unspecified";
+
+export interface NeighborItem {
+  asn: number;
+  as_name: string | null;
+  country_iso2: string | null;
+  relation: NeighborRelation;
+  active: boolean;
+  has_v4: boolean;
+  has_v6: boolean;
+  v4_prefixes: number;
+  v6_prefixes: number;
+  first_seen: string;
+  last_seen: string;
+}
+
+export interface NeighborsResponse {
+  asn: number;
+  start: string | null;
+  end: string | null;
+  items: NeighborItem[];
+}
+
+export interface RoaHistoryItem {
+  prefix: string;
+  asn: number;
+  max_len: number;
+  ta: string;
+  change: ChangeKind;
+  first_seen: string;
+  last_seen: string;
+  match: boolean;
+}
+
+export interface RouteObjectHistoryItem {
+  prefix: string;
+  asn: number;
+  source: string;
+  change: ChangeKind;
+  first_seen: string;
+  last_seen: string;
+  match: boolean;
+}

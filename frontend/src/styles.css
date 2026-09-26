@@ -209,3 +209,35 @@ button.primary:hover:not(:disabled) { background: var(--ink-700); }
   position: absolute; width: 1px; height: 1px; overflow: hidden;
   clip: rect(0 0 0 0); white-space: nowrap;
 }
+
+/* --- onglets (point 6) --------------------------------------------------- */
+.tabs { display: flex; gap: 0.3rem; flex-wrap: wrap; border-bottom: 1px solid var(--rule); padding-bottom: 0.5rem; margin-bottom: 0.7rem; }
+.tab {
+  font-family: var(--font-ui); font-size: 0.82rem; color: var(--ink-500);
+  background: transparent; border: 1px solid transparent; border-radius: var(--radius);
+  padding: 0.3rem 0.65rem; cursor: pointer;
+}
+.tab:hover { color: var(--ink-900); background: var(--paper-sunk); }
+.tab[aria-pressed="true"] { color: var(--paper-raised); background: var(--ink-800); }
+
+/* --- répartition en barres (voisins BGP par relation) -------------------- */
+.bars { display: flex; flex-direction: column; gap: 0.4rem; }
+.bars .bar-row { display: grid; grid-template-columns: 7rem 1fr 3rem; gap: 0.5rem; align-items: center; font-size: 0.82rem; }
+.bars .bar-track { background: var(--paper-sunk); border-radius: var(--radius); height: 0.6rem; overflow: hidden; }
+.bars .bar-fill { background: var(--teal); height: 100%; }
+
+/* --- modale ---------------------------------------------------------------
+ * Un simple recouvrement centré : les historiques ROA/Route Object sont des
+ * tableaux courts consultés ponctuellement, pas une navigation à part
+ * entière — pas besoin d'un composant plus élaboré (focus trap, etc.). */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(11, 27, 43, 0.45);
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 4rem 1rem; overflow-y: auto; z-index: 20;
+}
+.modal {
+  background: var(--paper-raised); border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: 1.1rem 1.3rem; max-width: 46rem; width: 100%;
+}
+.modal-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: 0.7rem; }
+.modal-head button { font-size: 0.85rem; }
