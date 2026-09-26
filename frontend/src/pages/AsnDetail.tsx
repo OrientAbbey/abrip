@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useApi, useTitle } from "../lib/useApi";
 import type { Series } from "../lib/types";
@@ -5,6 +6,7 @@ import { AsyncBlock } from "../components/StateBlock";
 import { AsLink, SeverityBadge } from "../components/Badges";
 import { AsnPrefixesPanel } from "../components/AsnPrefixesPanel";
 import { AsnNeighborsPanel } from "../components/AsnNeighborsPanel";
+import { DateRangePicker } from "../components/DateRangePicker";
 import { PALETTE, TimeChart } from "../components/TimeChart";
 import { countryLabel, day, dec, detectorLabel, dt, num } from "../lib/format";
 
@@ -39,9 +41,12 @@ interface AsnDetailData {
 export default function AsnDetail() {
   const { asn = "" } = useParams();
   useTitle(`AS${asn}`);
+  const [activityFrom, setActivityFrom] = useState("");
+  const [activityTo, setActivityTo] = useState("");
+  const activityRange = { from: activityFrom || undefined, to: activityTo || undefined };
   const detail = useApi<AsnDetailData>(`/asns/${encodeURIComponent(asn)}`);
-  const churn = useApi<Series>("/metrics/churn", { asn });
-  const upstream = useApi<Series>("/metrics/upstreams", { asn });
+  const churn = useApi<Series>("/metrics/churn", { asn, ...activityRange });
+  const upstream = useApi<Series>("/metrics/upstreams", { asn, ...activityRange });
 
   return (
     <div className="stack">
@@ -140,11 +145,20 @@ export default function AsnDetail() {
                 </section>
               </div>
 
-              <AsnPrefixesPanel asn={data.asn} />
-              <AsnNeighborsPanel asn={data.asn} />
+              <AsnPrefixesPanel
+                basePath={`/asns/${data.asn}`}
+                contextLabel="AS spécifié"
+                contextValue={`AS${data.asn}`}
+              />
+              <AsnNeighborsPanel basePath={`/asns/${data.asn}`} />
 
               <section className="card">
                 <h2>Activité dans le temps</h2>
+                <DateRangePicker
+                  from={activityFrom}
+                  to={activityTo}
+                  onChange={(f, t) => (setActivityFrom(f), setActivityTo(t))}
+                />
                 <AsyncBlock state={churn} rows={3}>
                   {(series) => (
                     <TimeChart

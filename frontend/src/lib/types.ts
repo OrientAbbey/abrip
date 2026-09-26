@@ -181,6 +181,9 @@ export type ChangeKind = "new" | "left" | "unstable" | "stable";
 
 export interface PrefixChangeItem {
   prefix: string;
+  /** Absent pour /asns/{asn}/prefixes/changes (redondant, un seul AS dans
+   *  le périmètre) ; présent pour /countries/{iso2}/prefixes/changes. */
+  asn: number;
   active: boolean;
   change: ChangeKind;
   first_seen: string;
@@ -199,6 +202,9 @@ export interface PrefixChanges {
 export type NeighborRelation = "providers" | "customers" | "peerings" | "unspecified";
 
 export interface NeighborItem {
+  /** Présent seulement pour /countries/{iso2}/neighbors (l'AS membre du
+   *  pays qui observe ce voisin) ; absent pour /asns/{asn}/neighbors. */
+  member_asn?: number;
   asn: number;
   as_name: string | null;
   country_iso2: string | null;

@@ -246,6 +246,33 @@ class TestTopologie:
         assert ("AFRINIC", "left") in changes
         assert ("RADB", "stable") in changes
 
+    def test_pays_liste_des_as_membres(self, client):
+        body = client.get("/api/countries/CM/asns").json()
+        assert body["country_iso2"] == "CM"
+        asns = {item["asn"] for item in body["items"]}
+        assert {37100, 37105, 37200} <= asns
+        for item in body["items"]:
+            assert {"asn", "as_name", "prefixes"} <= set(item)
+
+    def test_pays_inconnu_404(self, client):
+        response = client.get("/api/countries/ZZ/asns")
+        assert response.status_code == 404
+
+    def test_pays_serie_et_changements_agregent_les_membres(self, client):
+        timeseries = client.get("/api/countries/CM/prefixes/timeseries").json()
+        assert timeseries["points"], "au moins un point sur la fenêtre de démonstration"
+        changes = client.get("/api/countries/CM/prefixes/changes").json()
+        prefixes_by_member = {item["prefix"]: item["asn"] for item in changes["items"]}
+        # 196.216.32.0/20 (AS37200, "new") doit apparaître dans l'agrégat pays.
+        assert prefixes_by_member.get("196.216.32.0/20") == 37200
+
+    def test_pays_voisins_porte_le_membre_qui_les_observe(self, client):
+        body = client.get("/api/countries/CM/neighbors").json()
+        assert body["items"]
+        for item in body["items"]:
+            assert item["member_asn"] in {37100, 37105, 37200}
+            assert {"asn", "relation", "active", "first_seen", "last_seen"} <= set(item)
+
 
 class TestErreurs:
     def test_route_api_inconnue(self, client):

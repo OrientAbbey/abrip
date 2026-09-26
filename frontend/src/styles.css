@@ -220,6 +220,12 @@ button.primary:hover:not(:disabled) { background: var(--ink-700); }
 .tab:hover { color: var(--ink-900); background: var(--paper-sunk); }
 .tab[aria-pressed="true"] { color: var(--paper-raised); background: var(--ink-800); }
 
+/* --- info-bulle (terminologie) -------------------------------------------- */
+.info-icon {
+  color: var(--ink-400); cursor: help; margin-left: 0.25rem; font-size: 0.85em;
+}
+.info-icon:hover, .info-icon:focus-visible { color: var(--ink-900); }
+
 /* --- répartition en barres (voisins BGP par relation) -------------------- */
 .bars { display: flex; flex-direction: column; gap: 0.4rem; }
 .bars .bar-row { display: grid; grid-template-columns: 7rem 1fr 3rem; gap: 0.5rem; align-items: center; font-size: 0.82rem; }

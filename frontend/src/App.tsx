@@ -16,6 +16,7 @@ const PrefixDetail = lazy(() =>
   import("./pages/Prefixes").then((m) => ({ default: m.PrefixDetail })),
 );
 const Countries = lazy(() => import("./pages/Countries"));
+const CountryDetail = lazy(() => import("./pages/CountryDetail"));
 const About = lazy(() => import("./pages/About"));
 
 export default function App() {
@@ -37,6 +38,7 @@ export default function App() {
                     capturer le reste du chemin, pas un segment unique. */}
                 <Route path="prefixes/*" element={<PrefixDetail />} />
                 <Route path="countries" element={<Countries />} />
+                <Route path="countries/:iso2" element={<CountryDetail />} />
                 <Route path="about" element={<About />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>

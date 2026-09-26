@@ -17,7 +17,17 @@ const RELATION_TABS = [
 
 const BUCKETS = ["providers", "customers", "peerings", "unspecified"] as const;
 
-export function AsnNeighborsPanel({ asn }: { asn: number }) {
+/** Onglet Voisins BGP : réutilisé tel quel pour une fiche ASN (`basePath`
+ *  `/asns/{asn}`) et pour une fiche pays (`/countries/{iso2}`). `showMember`
+ *  affiche une colonne "Membre" (quel AS du pays observe ce voisin) — sans
+ *  objet pour un seul AS, indispensable pour un pays qui en a plusieurs. */
+export function AsnNeighborsPanel({
+  basePath,
+  showMember = false,
+}: {
+  basePath: string;
+  showMember?: boolean;
+}) {
   const [relation, setRelation] = useState("all");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -26,8 +36,8 @@ export function AsnNeighborsPanel({ asn }: { asn: number }) {
   // Le décompte par relation vient de la fenêtre "all" (jamais refiltrée),
   // pour que les barres restent une vue d'ensemble stable pendant qu'on
   // bascule d'un onglet à l'autre dans le tableau en dessous.
-  const overview = useApi<NeighborsResponse>(`/asns/${asn}/neighbors`, range);
-  const filtered = useApi<NeighborsResponse>(`/asns/${asn}/neighbors`, { relation, ...range });
+  const overview = useApi<NeighborsResponse>(`${basePath}/neighbors`, range);
+  const filtered = useApi<NeighborsResponse>(`${basePath}/neighbors`, { relation, ...range });
 
   return (
     <section className="card">
@@ -66,6 +76,7 @@ export function AsnNeighborsPanel({ asn }: { asn: number }) {
                 <table>
                   <thead>
                     <tr>
+                      {showMember && <th>Membre</th>}
                       <th>Actif</th>
                       <th>AS</th>
                       <th>Pays</th>
@@ -76,8 +87,13 @@ export function AsnNeighborsPanel({ asn }: { asn: number }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {body.items.map((item: NeighborItem) => (
-                      <tr key={item.asn}>
+                    {body.items.map((item: NeighborItem, i: number) => (
+                      <tr key={`${item.member_asn ?? ""}-${item.asn}-${i}`}>
+                        {showMember && (
+                          <td>
+                            <AsLink asn={item.member_asn ?? 0} />
+                          </td>
+                        )}
                         <td>{item.active ? "Oui" : "Non"}</td>
                         <td>
                           <AsLink asn={item.asn} name={item.as_name} />

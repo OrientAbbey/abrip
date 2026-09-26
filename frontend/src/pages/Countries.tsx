@@ -1,7 +1,10 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useApi, useTitle } from "../lib/useApi";
 import type { CountryRow, Series } from "../lib/types";
 import { AsyncBlock, EmptyState } from "../components/StateBlock";
+import { Info } from "../components/Info";
+import { DateRangePicker } from "../components/DateRangePicker";
 import { PALETTE, TimeChart } from "../components/TimeChart";
 import { countryLabel, dec, num, pct } from "../lib/format";
 
@@ -40,7 +43,13 @@ export default function Countries() {
   useTitle("Pays");
   const countries = useApi<CountryRow[]>("/countries");
   const [selected, setSelected] = useState<string | null>(null);
-  const series = useApi<Series>(selected ? "/metrics/countries" : null, { country: selected });
+  const [trendFrom, setTrendFrom] = useState("");
+  const [trendTo, setTrendTo] = useState("");
+  const series = useApi<Series>(selected ? "/metrics/countries" : null, {
+    country: selected,
+    from: trendFrom || undefined,
+    to: trendTo || undefined,
+  });
 
   return (
     <div className="stack">
@@ -70,11 +79,26 @@ export default function Countries() {
                         <th className="num">AS observés</th>
                         <th className="num">Préfixes visibles</th>
                         <th className="num">Fournisseurs (moy.)</th>
-                        <th className="num">HHI transit</th>
-                        <th className="num">Dépendance</th>
-                        <th className="num">Visibilité</th>
-                        <th className="num">Couverture obs.</th>
-                        <th className="num">Couverture ROA</th>
+                        <th className="num">
+                          HHI transit
+                          <Info text="Indice de Herfindahl-Hirschman de la répartition du trafic entrant entre fournisseurs de transit : proche de 1, un seul fournisseur domine ; proche de 0, répartition équilibrée." />
+                        </th>
+                        <th className="num">
+                          Dépendance
+                          <Info text="Part des AS du pays dont tout le trafic entrant transite par un seul fournisseur — un indicateur de fragilité structurelle, pas de qualité de service." />
+                        </th>
+                        <th className="num">
+                          Visibilité
+                          <Info text="Part des collecteurs de la plateforme qui voient effectivement les préfixes annoncés par ce pays." />
+                        </th>
+                        <th className="num">
+                          Couverture obs.
+                          <Info text="Part des AS alloués à ce pays réellement vus depuis les collecteurs — un chiffre bas relativise tous les autres indicateurs de la ligne." />
+                        </th>
+                        <th className="num">
+                          Couverture ROA
+                          <Info text="Part des préfixes annoncés par ce pays couverte par une autorisation RPKI (ROA) valide." />
+                        </th>
                         <th></th>
                       </tr>
                     </thead>
@@ -82,7 +106,9 @@ export default function Countries() {
                       {rows.map((c) => (
                         <tr key={c.country_iso2}>
                           <td>
-                            {countryLabel(c.country_iso2)}{" "}
+                            <Link to={`/countries/${c.country_iso2}`}>
+                              {countryLabel(c.country_iso2)}
+                            </Link>{" "}
                             <span className="muted mono">{c.country_iso2}</span>
                           </td>
                           <td className="num mono">{num(c.asns_observed)}</td>
@@ -126,6 +152,11 @@ export default function Countries() {
                     <h2>Tendance — {countryLabel(selected)}</h2>
                     <button onClick={() => setSelected(null)}>fermer</button>
                   </div>
+                  <DateRangePicker
+                    from={trendFrom}
+                    to={trendTo}
+                    onChange={(f, t) => (setTrendFrom(f), setTrendTo(t))}
+                  />
                   <AsyncBlock state={series} rows={3}>
                     {(data) => (
                       <TimeChart

@@ -8,6 +8,7 @@ import type {
   RouteObjectHistoryItem,
 } from "../lib/types";
 import { AsyncBlock } from "./StateBlock";
+import { AsLink } from "./Badges";
 import { DateRangePicker } from "./DateRangePicker";
 import { Modal } from "./Modal";
 import { PALETTE, TimeChart } from "./TimeChart";
@@ -33,7 +34,22 @@ const CHANGE_TABS = [
 
 type ModalState = { kind: "roa" | "route-object"; prefix: string } | null;
 
-export function AsnPrefixesPanel({ asn }: { asn: number }) {
+/** Onglet Préfixes : réutilisé tel quel pour une fiche ASN (`basePath`
+ *  `/asns/{asn}`) et pour une fiche pays (`/countries/{iso2}`) — les deux
+ *  API renvoient exactement la même forme (voir api/routers/topology.py).
+ *  `showOrigin` affiche une colonne "AS d'origine" : utile pour un pays
+ *  (plusieurs AS membres), redondant pour un seul AS. */
+export function AsnPrefixesPanel({
+  basePath,
+  contextLabel,
+  contextValue,
+  showOrigin = false,
+}: {
+  basePath: string;
+  contextLabel: string;
+  contextValue: string;
+  showOrigin?: boolean;
+}) {
   const [family, setFamily] = useState("all");
   const [tab, setTab] = useState("all");
   const [from, setFrom] = useState("");
@@ -41,11 +57,11 @@ export function AsnPrefixesPanel({ asn }: { asn: number }) {
   const [modal, setModal] = useState<ModalState>(null);
 
   const range = { from: from || undefined, to: to || undefined };
-  const timeseries = useApi<PrefixTimeseries>(`/asns/${asn}/prefixes/timeseries`, {
+  const timeseries = useApi<PrefixTimeseries>(`${basePath}/prefixes/timeseries`, {
     family,
     ...range,
   });
-  const changes = useApi<PrefixChanges>(`/asns/${asn}/prefixes/changes`, { tab, ...range });
+  const changes = useApi<PrefixChanges>(`${basePath}/prefixes/changes`, { tab, ...range });
 
   return (
     <section className="card">
@@ -80,6 +96,7 @@ export function AsnPrefixesPanel({ asn }: { asn: number }) {
                     <tr>
                       <th>Actif</th>
                       <th>Préfixe</th>
+                      {showOrigin && <th>AS d'origine</th>}
                       <th>RPKI ROA</th>
                       <th>Route Object</th>
                       <th>Changement</th>
@@ -91,9 +108,17 @@ export function AsnPrefixesPanel({ asn }: { asn: number }) {
                       <tr key={item.prefix}>
                         <td>{item.active ? "Oui" : "Non"}</td>
                         <td className="mono">{item.prefix}</td>
+                        {showOrigin && (
+                          <td>
+                            <AsLink asn={item.asn} />
+                          </td>
+                        )}
                         <td>
                           {item.has_roa ? (
-                            <button type="button" onClick={() => setModal({ kind: "roa", prefix: item.prefix })}>
+                            <button
+                              type="button"
+                              onClick={() => setModal({ kind: "roa", prefix: item.prefix })}
+                            >
                               Voir
                             </button>
                           ) : (
@@ -130,7 +155,8 @@ export function AsnPrefixesPanel({ asn }: { asn: number }) {
         <HistoryModal
           kind={modal.kind}
           prefix={modal.prefix}
-          asn={asn}
+          contextLabel={contextLabel}
+          contextValue={contextValue}
           from={from}
           to={to}
           onClose={() => setModal(null)}
@@ -143,14 +169,16 @@ export function AsnPrefixesPanel({ asn }: { asn: number }) {
 function HistoryModal({
   kind,
   prefix,
-  asn,
+  contextLabel,
+  contextValue,
   from,
   to,
   onClose,
 }: {
   kind: "roa" | "route-object";
   prefix: string;
-  asn: number;
+  contextLabel: string;
+  contextValue: string;
   from: string;
   to: string;
   onClose: () => void;
@@ -167,8 +195,8 @@ function HistoryModal({
       <div className="kv" style={{ marginBottom: "0.8rem" }}>
         <dt>Préfixe</dt>
         <dd className="mono">{prefix}</dd>
-        <dt>AS spécifié</dt>
-        <dd className="mono">AS{asn}</dd>
+        <dt>{contextLabel}</dt>
+        <dd className="mono">{contextValue}</dd>
       </div>
       <AsyncBlock state={state} rows={2}>
         {(body) =>
