@@ -273,6 +273,42 @@ class TestTopologie:
             assert item["member_asn"] in {37100, 37105, 37200}
             assert {"asn", "relation", "active", "first_seen", "last_seen"} <= set(item)
 
+    def test_graphe_propagation_reduit_aux_as_observes(self, client):
+        # 197.155.64.0/22 : MOAS planté (deux origines, 37100 et 45090,
+        # voir demo/generator.py::PLANTED) — un bon cas pour vérifier
+        # l'agrégation de plusieurs chemins en un graphe.
+        body = client.get("/api/prefixes/197.155.64.0%2F22/propagation").json()
+        assert body["nodes"] and body["edges"]
+        node_asns = {n["asn"] for n in body["nodes"]}
+        assert {37100, 45090} <= node_asns
+        for node in body["nodes"]:
+            assert {"asn", "as_name", "country_iso2", "paths", "hidden_paths"} <= set(node)
+            for path in node["paths"]:
+                assert node["asn"] in path
+        for edge in body["edges"]:
+            assert {"source", "target", "relation"} <= set(edge)
+            assert edge["relation"] in {"providers", "customers", "peerings", "unspecified"}
+
+    def test_graphe_propagation_filtre_par_origine(self, client):
+        tout = client.get("/api/prefixes/197.155.64.0%2F22/propagation").json()
+        origine = client.get(
+            "/api/prefixes/197.155.64.0%2F22/propagation", params={"asn": 37100}
+        ).json()
+        assert {n["asn"] for n in origine["nodes"]} <= {n["asn"] for n in tout["nodes"]}
+        assert 45090 not in {n["asn"] for n in origine["nodes"]}
+
+    def test_graphe_propagation_tronque_aux_cibles(self, client):
+        # Chaque chemin doit s'arrêter à la première cible rencontrée depuis
+        # l'origine (37100 -> 3320/6939, tous deux dans `targets`).
+        body = client.get(
+            "/api/prefixes/197.155.64.0%2F22/propagation",
+            params={"asn": 37100, "targets": "3320,6939"},
+        ).json()
+        assert {n["asn"] for n in body["nodes"]} == {37100, 3320, 6939}
+        for node in body["nodes"]:
+            for path in node["paths"]:
+                assert path[-1] in {37100, 3320, 6939}
+
 
 class TestErreurs:
     def test_route_api_inconnue(self, client):

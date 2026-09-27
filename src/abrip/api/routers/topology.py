@@ -23,6 +23,7 @@ Quatre familles d'endpoints, tous en lecture seule comme le reste de l'API
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from itertools import pairwise
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -481,6 +482,124 @@ def prefix_roa_history(
     for r in rows:
         r["match"] = int(r["asn"]) in current
     return {"prefix": prefix, "items": rows}
+
+
+@router.get(
+    "/prefixes/{prefix:path}/propagation",
+    summary="Graphe de propagation d'un préfixe (nœuds d'AS) — ADR 0004",
+)
+def prefix_propagation(
+    prefix: str,
+    asn: int | None = Query(
+        None, description="Restreindre à cette origine (utile si le préfixe a plusieurs)"
+    ),
+    date_from: datetime | None = Query(None, alias="from"),
+    date_to: datetime | None = Query(None, alias="to"),
+    targets: str | None = Query(
+        None,
+        description="ASN séparés par des virgules ; chaque chemin est tronqué à la première "
+        "cible rencontrée depuis l'origine (au-delà, rien de nouveau à montrer)",
+    ),
+    max_paths: int = Query(
+        10, ge=1, le=100, description="Chemins montrés par nœud dans l'info-bulle"
+    ),
+    data: DataAccess = Depends(get_data_access),
+) -> dict[str, Any]:
+    """Graphe réduit (pas étendu, voir ADR 0004) : seuls les AS effectivement
+    vus sur un chemin observé pour ce préfixe apparaissent — aucune
+    complétion vers des voisins connus mais non observés.
+    """
+    empty: dict[str, Any] = {
+        "prefix": prefix,
+        "asn": asn,
+        "start": date_from.date().isoformat() if date_from else None,
+        "end": date_to.date().isoformat() if date_to else None,
+        "nodes": [],
+        "edges": [],
+    }
+    if not data.exists("bgp_elements"):
+        return empty
+
+    elements = data.table("bgp_elements")
+    conditions = ["prefix = ?"]
+    params: list[Any] = [prefix]
+    if asn is not None:
+        conditions.append("origin_asn = ?")
+        params.append(asn)
+    if date_from:
+        conditions.append("ts >= ?")
+        params.append(date_from)
+    if date_to:
+        conditions.append("ts <= ?")
+        params.append(date_to)
+    rows = data.query(
+        f"SELECT DISTINCT as_path_dedup FROM {elements} WHERE {' AND '.join(conditions)}", params
+    )
+
+    target_set = {int(t) for t in targets.split(",") if t.strip()} if targets else None
+    paths: set[tuple[int, ...]] = set()
+    for r in rows:
+        raw: list[int] = r["as_path_dedup"]
+        if not raw:
+            continue
+        # `as_path_dedup` va du collecteur vers l'origine (voir
+        # etl/pch_parser.py) ; on l'inverse pour raisonner dans le sens de
+        # propagation, origine -> collecteur.
+        ordered = list(reversed(raw))
+        if target_set:
+            cut = next((i for i, a in enumerate(ordered) if a in target_set), None)
+            if cut is not None:
+                ordered = ordered[: cut + 1]
+        paths.add(tuple(ordered))
+
+    if not paths:
+        return empty
+
+    node_paths: dict[int, list[tuple[int, ...]]] = {}
+    edge_counts: dict[tuple[int, int], int] = {}
+    for path in sorted(paths):
+        for node in set(path):
+            node_paths.setdefault(node, []).append(path)
+        for a, b in pairwise(path):
+            edge_counts[(a, b)] = edge_counts.get((a, b), 0) + 1
+
+    index = RelationshipIndex(
+        _load_reference(data.settings, "ref_as_rel"),
+        _load_reference(data.settings, "ref_as_rel_evidence"),
+    )
+    countries = {
+        int(r["asn"]): r["country_iso2"]
+        for r in (
+            data.query(f"SELECT asn, country_iso2 FROM {data.table('ref_asn')}")
+            if data.exists("ref_asn")
+            else []
+        )
+    }
+    names = org_names(data, node_paths.keys())
+
+    nodes = [
+        {
+            "asn": node,
+            "as_name": names.get(node),
+            "country_iso2": countries.get(node),
+            "paths": [list(p) for p in node_path_list[:max_paths]],
+            "hidden_paths": max(0, len(node_path_list) - max_paths),
+        }
+        for node, node_path_list in sorted(node_paths.items())
+    ]
+    edges = [
+        {"source": a, "target": b, "relation": _RELATION_BUCKET[index.get(b, a).value]}
+        for a, b in sorted(edge_counts)
+    ]
+
+    return {
+        "prefix": prefix,
+        "asn": asn,
+        "start": date_from.date().isoformat() if date_from else None,
+        "end": date_to.date().isoformat() if date_to else None,
+        "nodes": nodes,
+        "edges": edges,
+    }
 
 
 @router.get(

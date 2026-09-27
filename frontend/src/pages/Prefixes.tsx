@@ -3,6 +3,7 @@ import { useApi, useTitle } from "../lib/useApi";
 import type { Page, PrefixSummary, Series } from "../lib/types";
 import { AsyncBlock, EmptyState } from "../components/StateBlock";
 import { SeverityBadge, AsLink } from "../components/Badges";
+import { PropagationGraph } from "../components/PropagationGraph";
 import { PALETTE, TimeChart } from "../components/TimeChart";
 import { countryLabel, detectorLabel, dt, num, pct } from "../lib/format";
 
@@ -184,6 +185,8 @@ export function PrefixDetail() {
                   )}
                 </div>
               </div>
+
+              <PropagationGraph prefix={data.prefix} origins={data.origins} />
 
               <div className="grid cols-2">
                 <section className="card">

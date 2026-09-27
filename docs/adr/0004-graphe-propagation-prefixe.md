@@ -1,8 +1,9 @@
-# ADR 0004 — Graphe de propagation d'un préfixe (nœuds d'AS), pour plus tard
+# ADR 0004 — Graphe de propagation d'un préfixe (nœuds d'AS)
 
-**Statut :** proposé — non implémenté
+**Statut :** mis en œuvre (27/09/2026) — voir « Mise en œuvre » en fin de
+document pour les écarts avec la proposition initiale.
 **Date :** 2026-09-25
-**Portée :** `abrip.api`, frontend (page ASN / page préfixe)
+**Portée :** `abrip.api`, frontend (page préfixe)
 
 ## Contexte
 
@@ -89,3 +90,30 @@ n'affiche aujourd'hui aucun chemin agrégé). Écartée comme solution durable
 dès qu'un préfixe est vu par une dizaine de collecteurs ou plus : la
 redondance entre chemins partageant les mêmes AS de transit rend une liste
 brute difficile à parcourir, ce que le graphe résout par construction.
+
+## Mise en œuvre
+
+`GET /api/prefixes/{prefix}/propagation?asn=&from=&to=&targets=&max_paths=`
+(`api/routers/topology.py::prefix_propagation`) et le composant frontend
+`PropagationGraph.tsx`, posé sur la fiche préfixe (`Prefixes.tsx`).
+
+Conforme à la proposition ci-dessus sur tous les points structurants :
+graphe réduit (jamais de complétion vers un AS non observé), nœuds
+étiquetés ASN + nom court avec info-bulle (ASN, nom complet, pays, chemins
+limités à 10 par défaut + compteur des chemins non affichés), arêtes
+colorées par relation CAIDA, troncature au premier `target` rencontré
+depuis l'origine.
+
+Deux précisions apportées en cours de route, sans changer la portée :
+
+- **Disposition** : la proposition ne fixait pas de disposition. Choisie
+  ici : en colonnes par distance BFS à l'origine (racines = AS sans arête
+  entrante) plutôt qu'un algorithme de forces — plus lisible pour un graphe
+  qui reste un arbre ou un DAG peu dense dans les cas observés, et pas
+  besoin d'évaluer une bibliothèque de graphe supplémentaire pour une
+  première version.
+- **Poids des arêtes** : toujours absent de l'API comme prévu, mais
+  `prefix_propagation` calcule déjà `edge_counts` en interne pour dédupliquer
+  les arêtes — l'exposer un jour (ex. en épaisseur de trait) n'exigerait
+  qu'un champ de réponse en plus, pas un nouveau calcul.
+
