@@ -22,13 +22,14 @@ Quatre familles d'endpoints, tous en lecture seule comme le reste de l'API
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from itertools import pairwise
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from abrip.analytics.metrics import _load_reference
+from abrip.analytics.replay import ReplayEvent, effective_step, orient_path, replay
 from abrip.api.deps import DataAccess, get_data_access, org_names
 from abrip.reference.history import classify_presence, diff_entities, snapshot_dates
 from abrip.reference.relationships import RelationshipIndex
@@ -703,18 +704,12 @@ def prefix_propagation(
     target_set = {int(t) for t in targets.split(",") if t.strip()} if targets else None
     paths: set[tuple[int, ...]] = set()
     for r in rows:
-        raw: list[int] = r["as_path_dedup"]
-        if not raw:
-            continue
         # `as_path_dedup` va du collecteur vers l'origine (voir
-        # etl/pch_parser.py) ; on l'inverse pour raisonner dans le sens de
-        # propagation, origine -> collecteur.
-        ordered = list(reversed(raw))
-        if target_set:
-            cut = next((i for i, a in enumerate(ordered) if a in target_set), None)
-            if cut is not None:
-                ordered = ordered[: cut + 1]
-        paths.add(tuple(ordered))
+        # etl/pch_parser.py) ; orient_path l'inverse pour raisonner dans le
+        # sens de propagation, origine -> collecteur.
+        oriented = orient_path(r["as_path_dedup"] or (), None, target_set)
+        if oriented is not None:
+            paths.add(oriented)
 
     if not paths:
         return empty
@@ -763,6 +758,122 @@ def prefix_propagation(
         "end": date_to.date().isoformat() if date_to else None,
         "nodes": nodes,
         "edges": edges,
+    }
+
+
+REPLAY_MAX_DAYS = 7
+REPLAY_WARMUP = timedelta(days=1)
+
+
+def _utc(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    return value if value.tzinfo else value.replace(tzinfo=UTC)
+
+
+@router.get(
+    "/prefixes/{prefix:path}/propagation/replay",
+    summary="Rejeu de la propagation d'un préfixe sur une tranche de temps",
+)
+def prefix_propagation_replay(
+    prefix: str,
+    asn: int | None = Query(None, description="Restreindre à cette origine"),
+    date_from: datetime | None = Query(None, alias="from"),
+    date_to: datetime | None = Query(None, alias="to"),
+    targets: str | None = Query(None, description="ASN séparés par des virgules (troncature)"),
+    step: int = Query(15, ge=1, le=1440, description="Pas d'une tranche, en minutes"),
+    max_frames: int = Query(200, ge=10, le=500, description="Nombre maximal de tranches"),
+    data: DataAccess = Depends(get_data_access),
+) -> dict[str, Any]:
+    """Une tranche par pas de temps, chacune portant l'état du graphe à sa
+    fin (voir ``analytics/replay.py``). Les nœuds et arêtes sont l'union de
+    toutes les tranches : le client calcule une disposition unique, les
+    tranches ne listent que ce qui est actif à cet instant.
+
+    La fenêtre est bornée à ``REPLAY_MAX_DAYS`` jours (``clamped``), et le pas
+    élargi si besoin pour rester sous ``max_frames`` (``step_minutes`` donne
+    le pas réellement utilisé). L'état est amorcé avec ``REPLAY_WARMUP`` avant
+    le début : un pair silencieux depuis plus longtemps est absent au départ.
+    """
+    empty: dict[str, Any] = {
+        "prefix": prefix,
+        "asn": asn,
+        "start": None,
+        "end": None,
+        "step_minutes": step,
+        "warmup_hours": int(REPLAY_WARMUP.total_seconds() // 3600),
+        "clamped": False,
+        "nodes": [],
+        "edges": [],
+        "frames": [],
+    }
+    if not data.exists("bgp_elements"):
+        return empty
+    elements = data.table("bgp_elements")
+    bounds = data.query(
+        f"SELECT min(ts) AS lo, max(ts) AS hi FROM {elements} WHERE prefix = ?", [prefix]
+    )
+    if not bounds or bounds[0]["lo"] is None:
+        return empty
+
+    start = _utc(date_from) or bounds[0]["lo"]
+    end = _utc(date_to) or bounds[0]["hi"]
+    if end <= start:
+        return empty
+    clamped = end - start > timedelta(days=REPLAY_MAX_DAYS)
+    if clamped:
+        start = end - timedelta(days=REPLAY_MAX_DAYS)
+    step_td = effective_step(end - start, timedelta(minutes=step), max_frames)
+
+    rows = data.query(
+        f"""SELECT ts, elem_type, collector, peer_ip, as_path_dedup FROM {elements}
+            WHERE prefix = ? AND ts >= ? AND ts <= ? ORDER BY ts""",
+        [prefix, start - REPLAY_WARMUP, end],
+    )
+    events = [
+        ReplayEvent(
+            ts=r["ts"],
+            kind=r["elem_type"],
+            peer=(str(r["collector"]), str(r["peer_ip"])),
+            path=tuple(r["as_path_dedup"] or ()),
+        )
+        for r in rows
+    ]
+    target_set = {int(t) for t in targets.split(",") if t.strip()} if targets else None
+    frames = replay(events, start, end, step_td, origin=asn, targets=target_set)
+
+    all_edges = sorted({e for f in frames for path in f.paths for e in pairwise(path)})
+    edge_index = {e: i for i, e in enumerate(all_edges)}
+    all_nodes = sorted({n for f in frames for path in f.paths for n in path})
+
+    index = _relationship_index(data)
+    countries = _asn_countries(data)
+    names = org_names(data, all_nodes)
+
+    return {
+        **empty,
+        "start": start.isoformat(),
+        "end": end.isoformat(),
+        "step_minutes": int(step_td.total_seconds() // 60),
+        "clamped": clamped,
+        "nodes": [
+            {"asn": n, "as_name": names.get(n), "country_iso2": countries.get(n)} for n in all_nodes
+        ],
+        "edges": [
+            {"source": a, "target": b, "relation": _RELATION_BUCKET[index.get(b, a).value]}
+            for a, b in all_edges
+        ],
+        "frames": [
+            {
+                "ts": f.ts.isoformat(),
+                "announcements": f.announcements,
+                "withdrawals": f.withdrawals,
+                "path_count": len(f.paths),
+                "nodes": sorted({n for path in f.paths for n in path}),
+                "edges": sorted({edge_index[e] for path in f.paths for e in pairwise(path)}),
+            }
+            for f in frames
+        ],
     }
 
 

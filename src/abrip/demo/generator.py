@@ -264,6 +264,26 @@ def _emit_anomaly(
                 )
                 if record:
                     yield record
+        # Fin de l'incident : les pairs reviennent à l'origine légitime, sans
+        # quoi le rejeu de propagation garderait l'hijack indéfiniment (un pair
+        # conserve son dernier chemin tant qu'il n'en annonce pas un autre).
+        # Décalage fixe par pair plutôt que rng : ne pas décaler la séquence
+        # aléatoire, donc le reste du jeu de démonstration.
+        end = base + timedelta(hours=anomaly.detail["duration_hours"])
+        legit = next(a for a in AFRICAN_ASNS if a.asn == anomaly.detail["legitimate_origin"])
+        for offset, peer in enumerate(peers[:3]):
+            record = to_element_dict(
+                timestamp=end + timedelta(minutes=offset),
+                collector=collector,
+                peer_asn=peer,
+                peer_ip=PEER_IPS.get(peer, "0.0.0.0"),
+                elem_type="A",
+                prefix=anomaly.prefix,
+                as_path=_origin_path(legit, peer, random.Random(peer)),  # rng local
+                source_file=source_file,
+            )
+            if record:
+                yield record
 
     elif anomaly.kind == "subprefix":
         bad = anomaly.detail["hijacking_origin"]

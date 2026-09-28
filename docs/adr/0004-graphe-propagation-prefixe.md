@@ -117,3 +117,37 @@ Deux précisions apportées en cours de route, sans changer la portée :
   les arêtes — l'exposer un jour (ex. en épaisseur de trait) n'exigerait
   qu'un champ de réponse en plus, pas un nouveau calcul.
 
+
+## Rejeu dans le temps (28/09/2026)
+
+Demandé après la première version : dérouler la propagation sur une tranche
+de temps plutôt que de n'en montrer que l'agrégat.
+
+`GET /api/prefixes/{prefix}/propagation/replay?asn=&from=&to=&targets=&step=&max_frames=`
+(`api/routers/topology.py`) et le mode « Rejouer » de `PropagationGraph.tsx`
+(`PropagationReplay.tsx`). Le moteur est un module pur, `analytics/replay.py`.
+
+- **État, pas événements.** Chaque tranche porte l'état du graphe à sa fin :
+  l'état d'un pair (collecteur, adresse) est son dernier chemin annoncé, tant
+  qu'il n'est pas retiré. Le graphe d'une tranche est l'union des chemins
+  courants. Un retrait n'a pas de chemin donc pas d'origine : l'état est tenu
+  pour toutes les origines, et le filtre `asn` n'est appliqué qu'à la
+  construction de chaque tranche — filtrer avant conserverait à tort l'ancien
+  chemin d'un pair passé d'une origine à une autre.
+- **Disposition unique.** Nœuds et arêtes sont l'union de toutes les
+  tranches ; le client calcule une seule disposition, les nœuds ne bougent pas
+  pendant la lecture. Absent = grisé ; apparu ou disparu par rapport à la
+  tranche précédente = vert / rouge pointillé (comparaison côté client).
+- **Bornes.** Fenêtre limitée à 7 jours (`clamped`), pas élargi pour rester
+  sous `max_frames` (`step_minutes` donne le pas réel), état amorcé 24 h avant
+  le début.
+
+Limite connue : un pair silencieux depuis plus de 24 h avant la fenêtre est
+absent de la première tranche. En mode live, partir du dernier RIB avant la
+fenêtre corrigerait cela ; non fait, la cadence des RIB varie selon le projet.
+
+Le rejeu a révélé un défaut du jeu de démonstration : le MOAS planté déclarait
+`duration_hours: 4` sans jamais y mettre fin, l'hijack restait donc actif
+indéfiniment. Les pairs reviennent maintenant à l'origine légitime à la fin de
+la durée (chemin déterministe, générateur aléatoire local pour ne pas décaler
+le reste du jeu ; détection inchangée : 16 événements, mêmes détecteurs).

@@ -330,6 +330,40 @@ class TestTopologie:
         assert {n["asn"] for n in origine["nodes"]} <= {n["asn"] for n in tout["nodes"]}
         assert 45090 not in {n["asn"] for n in origine["nodes"]}
 
+    def test_rejeu_propagation_apparition_et_fin_de_l_hijack(self, client):
+        # MOAS planté le jour 3 à 09:00 pour 4 h (demo/generator.py::PLANTED) :
+        # l'origine 45090 est absente avant, présente pendant, absente après.
+        body = client.get(
+            "/api/prefixes/197.155.64.0%2F22/propagation/replay",
+            params={
+                "asn": 45090,
+                "from": "2026-08-27T08:00:00Z",
+                "to": "2026-08-27T15:00:00Z",
+                "step": 30,
+            },
+        ).json()
+        counts = {f["ts"][11:16]: f["path_count"] for f in body["frames"]}
+        assert counts["08:30"] == 0
+        assert counts["10:00"] > 0
+        assert counts["14:00"] == 0
+        assert {"nodes", "edges", "frames", "step_minutes", "clamped"} <= set(body)
+        for frame in body["frames"]:
+            assert {"ts", "announcements", "withdrawals", "path_count", "nodes", "edges"} <= set(
+                frame
+            )
+            assert all(0 <= i < len(body["edges"]) for i in frame["edges"])
+
+    def test_rejeu_propagation_elargit_le_pas_pour_rester_sous_le_maximum(self, client):
+        body = client.get(
+            "/api/prefixes/197.155.64.0%2F22/propagation/replay", params={"max_frames": 50}
+        ).json()
+        assert len(body["frames"]) <= 51  # tranche initiale incluse
+        assert body["step_minutes"] > 15
+
+    def test_rejeu_propagation_prefixe_inconnu(self, client):
+        body = client.get("/api/prefixes/1.2.3.0%2F24/propagation/replay").json()
+        assert body["frames"] == [] and body["nodes"] == []
+
     def test_graphe_propagation_tronque_aux_cibles(self, client):
         # Chaque chemin doit s'arrêter à la première cible rencontrée depuis
         # l'origine (37100 -> 3320/6939, tous deux dans `targets`).
