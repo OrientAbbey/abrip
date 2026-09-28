@@ -3,6 +3,7 @@ import { useApi } from "../lib/useApi";
 import type {
   PrefixChangeItem,
   PrefixChanges,
+  PrefixHistory,
   PrefixTimeseries,
   RoaHistoryItem,
   RouteObjectHistoryItem,
@@ -11,6 +12,7 @@ import { AsyncBlock } from "./StateBlock";
 import { AsLink } from "./Badges";
 import { DateRangePicker } from "./DateRangePicker";
 import { Modal } from "./Modal";
+import { PeriodsTable } from "./PeriodsTable";
 import { PALETTE, TimeChart } from "./TimeChart";
 import { Tabs } from "./Tabs";
 import { changeLabel, day } from "../lib/format";
@@ -32,7 +34,10 @@ const CHANGE_TABS = [
   },
 ];
 
-type ModalState = { kind: "roa" | "route-object"; prefix: string } | null;
+type ModalState =
+  | { kind: "roa" | "route-object"; prefix: string }
+  | { kind: "announcements"; prefix: string; asn: number }
+  | null;
 
 /** Onglet Préfixes : réutilisé tel quel pour une fiche ASN (`basePath`
  *  `/asns/{asn}`) et pour une fiche pays (`/countries/{iso2}`) — les deux
@@ -44,11 +49,18 @@ export function AsnPrefixesPanel({
   contextLabel,
   contextValue,
   showOrigin = false,
+  originAsn,
+  originName,
 }: {
   basePath: string;
   contextLabel: string;
   contextValue: string;
   showOrigin?: boolean;
+  /** Mode ASN : l'AS d'origine de tous les préfixes listés (en mode pays,
+   *  chaque ligne porte le sien dans `item.asn`). Sert à adresser
+   *  l'historique d'annonce, toujours par couple (AS, préfixe). */
+  originAsn?: number;
+  originName?: string | null;
 }) {
   const [family, setFamily] = useState("all");
   const [tab, setTab] = useState("all");
@@ -77,7 +89,7 @@ export function AsnPrefixesPanel({
             <TimeChart
               points={series.points.map((p) => ({ ts: p.day, values: { prefixes: p.prefixes } }))}
               height={200}
-              series={[{ key: "prefixes", label: "Préfixes annoncés", color: PALETTE.ink }]}
+              series={[{ key: "prefixes", label: "Préfixes annoncés", color: PALETTE.ink, kind: "area" }]}
             />
           )
         }
@@ -100,7 +112,7 @@ export function AsnPrefixesPanel({
                       <th>RPKI ROA</th>
                       <th>Route Object</th>
                       <th>Changement</th>
-                      <th>Première/dernière vue</th>
+                      <th>Historique</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -138,8 +150,23 @@ export function AsnPrefixesPanel({
                           )}
                         </td>
                         <td>{changeLabel(item.change)}</td>
-                        <td className="mono">
-                          {day(item.first_seen)} → {day(item.last_seen)}
+                        <td>
+                          {(showOrigin ? item.asn : originAsn) !== undefined ? (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setModal({
+                                  kind: "announcements",
+                                  prefix: item.prefix,
+                                  asn: (showOrigin ? item.asn : originAsn) as number,
+                                })
+                              }
+                            >
+                              Voir
+                            </button>
+                          ) : (
+                            "—"
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -151,7 +178,17 @@ export function AsnPrefixesPanel({
         </AsyncBlock>
       </div>
 
-      {modal && (
+      {modal && modal.kind === "announcements" && (
+        <AnnouncementHistoryModal
+          prefix={modal.prefix}
+          asn={modal.asn}
+          asName={modal.asn === originAsn ? (originName ?? null) : null}
+          from={from}
+          to={to}
+          onClose={() => setModal(null)}
+        />
+      )}
+      {modal && modal.kind !== "announcements" && (
         <HistoryModal
           kind={modal.kind}
           prefix={modal.prefix}
@@ -245,6 +282,43 @@ function HistoryModal({
             </div>
           )
         }
+      </AsyncBlock>
+    </Modal>
+  );
+}
+
+function AnnouncementHistoryModal({
+  prefix,
+  asn,
+  asName,
+  from,
+  to,
+  onClose,
+}: {
+  prefix: string;
+  asn: number;
+  asName: string | null;
+  from: string;
+  to: string;
+  onClose: () => void;
+}) {
+  const state = useApi<PrefixHistory>(`/asns/${asn}/prefixes/${prefix}/history`, {
+    from: from || undefined,
+    to: to || undefined,
+  });
+
+  return (
+    <Modal title="Historique d'annonce" onClose={onClose}>
+      <div className="kv" style={{ marginBottom: "0.8rem" }}>
+        <dt>Préfixe</dt>
+        <dd className="mono">{prefix}</dd>
+        <dt>AS d'origine</dt>
+        <dd>
+          <AsLink asn={asn} name={asName} />
+        </dd>
+      </div>
+      <AsyncBlock state={state} rows={2}>
+        {(body) => <PeriodsTable periods={body.items} />}
       </AsyncBlock>
     </Modal>
   );

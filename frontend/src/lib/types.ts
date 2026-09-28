@@ -210,10 +210,9 @@ export interface NeighborItem {
   country_iso2: string | null;
   relation: NeighborRelation;
   active: boolean;
+  change: ChangeKind;
   has_v4: boolean;
   has_v6: boolean;
-  v4_prefixes: number;
-  v6_prefixes: number;
   first_seen: string;
   last_seen: string;
 }
@@ -244,4 +243,37 @@ export interface RouteObjectHistoryItem {
   first_seen: string;
   last_seen: string;
   match: boolean;
+}
+
+// --- Séries temporelles de voisins + modales d'historique -----------------
+
+export interface NeighborTimeseries {
+  relation: "all" | NeighborRelation;
+  points: Array<{ day: string; neighbors: number }>;
+}
+
+/** Une période contiguë de présence (voir topology.py::_presence_runs).
+ *  `type` n'existe que pour l'historique d'une relation entre deux AS. */
+export interface PresencePeriod {
+  first_seen: string;
+  last_seen: string;
+  active: boolean;
+  type?: string;
+}
+
+export interface NeighborHistory {
+  asn: number;
+  neighbor: number;
+  start: string | null;
+  end: string | null;
+  ipv4: PresencePeriod[];
+  ipv6: PresencePeriod[];
+}
+
+export interface PrefixHistory {
+  asn: number;
+  prefix: string;
+  start: string | null;
+  end: string | null;
+  items: PresencePeriod[];
 }

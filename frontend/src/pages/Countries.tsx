@@ -169,6 +169,7 @@ export default function Countries() {
                             key: "transit_dependency_ratio",
                             label: "Dépendance au transit",
                             color: PALETTE.crimson,
+                            kind: "area",
                           },
                           { key: "hhi_transit", label: "HHI moyen", color: PALETTE.amber },
                           { key: "visibility", label: "Visibilité moyenne", color: PALETTE.teal },

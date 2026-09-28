@@ -155,7 +155,7 @@ export default function Overview() {
               yDomain={[0, 1]}
               valueFormat={(v) => `${Math.round(v * 100)}%`}
               series={[
-                { key: "visibility_ratio", label: "Visibilité globale", color: PALETTE.ink },
+                { key: "visibility_ratio", label: "Visibilité globale", color: PALETTE.ink, kind: "area" },
                 { key: "visibility_local", label: "Collecteurs africains", color: PALETTE.teal },
                 { key: "visibility_external", label: "Vue extérieure", color: PALETTE.amber },
               ]}

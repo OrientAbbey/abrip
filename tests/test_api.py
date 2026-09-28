@@ -273,6 +273,39 @@ class TestTopologie:
             assert item["member_asn"] in {37100, 37105, 37200}
             assert {"asn", "relation", "active", "first_seen", "last_seen"} <= set(item)
 
+    def test_voisins_serie_temporelle(self, client):
+        body = client.get("/api/asns/37400/neighbors/timeseries").json()
+        assert body["points"]
+        assert all({"day", "neighbors"} <= set(p) for p in body["points"])
+
+    def test_voisins_change_et_tab(self, client):
+        tout = client.get("/api/asns/37400/neighbors").json()["items"]
+        assert tout and all("change" in item for item in tout)
+        for tab in ("new", "left", "unstable"):
+            filtered = client.get("/api/asns/37400/neighbors", params={"tab": tab}).json()["items"]
+            assert all(item["change"] == tab for item in filtered)
+
+    def test_historique_relation_deux_as(self, client):
+        # 174 est fournisseur (p2c) de 37400 sur toute la fenêtre de démo.
+        body = client.get("/api/asns/37400/neighbors/174/history").json()
+        assert body["ipv4"]
+        for row in body["ipv4"]:
+            assert row["type"] == "p2c"
+            assert {"first_seen", "last_seen", "active"} <= set(row)
+
+    def test_historique_relation_paire_inexistante(self, client):
+        body = client.get("/api/asns/37400/neighbors/64500/history").json()
+        assert body["ipv4"] == [] and body["ipv6"] == []
+
+    def test_historique_annonce_prefixe_plusieurs_periodes(self, client):
+        # 105.16.0.0/16 (AS36900) flappe (voir demo/generator.py::_BGP_PREFIX_CHURN)
+        # -> plusieurs périodes distinctes, pas une seule première/dernière vue.
+        body = client.get("/api/asns/36900/prefixes/105.16.0.0%2F16/history").json()
+        assert len(body["items"]) > 1
+        assert body["items"][-1]["active"] is True
+        for item in body["items"][:-1]:
+            assert item["active"] is False
+
     def test_graphe_propagation_reduit_aux_as_observes(self, client):
         # 197.155.64.0/22 : MOAS planté (deux origines, 37100 et 45090,
         # voir demo/generator.py::PLANTED) — un bon cas pour vérifier

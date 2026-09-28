@@ -92,6 +92,26 @@ def _date_range(start: str, end: str) -> list[str]:
     return days
 
 
+def _presence_runs(seen: list[str], all_days: list[str]) -> list[tuple[str, str]]:
+    """Périodes contiguës de présence (``first_seen``, ``last_seen``) sur
+    ``all_days`` — une entité "unstable" produit plusieurs périodes plutôt
+    qu'une seule paire première/dernière vue, qui masquerait les absences
+    intermédiaires (voir les modales d'historique, points 4 du 27/09/2026).
+    """
+    seen_set = set(seen)
+    runs: list[tuple[str, str]] = []
+    current: list[str] = []
+    for day in all_days:
+        if day in seen_set:
+            current.append(day)
+        elif current:
+            runs.append((current[0], current[-1]))
+            current = []
+    if current:
+        runs.append((current[0], current[-1]))
+    return runs
+
+
 def _day_bounds(
     data: DataAccess, asns: list[int], date_from: datetime | None, date_to: datetime | None
 ) -> tuple[str, str] | None:
@@ -209,9 +229,19 @@ def _prefixes_changes(
     return items
 
 
-def _neighbors(
-    data: DataAccess, asns: list[int], relation: str, start: str, end: str
-) -> list[dict[str, Any]]:
+def _neighbor_pairs_by_day(
+    data: DataAccess, asns: list[int], start: str, end: str
+) -> dict[tuple[int, int], dict[str, set[str]]]:
+    """(membre, voisin) -> jours de présence, tous chemins confondus et par
+    famille (``days``/``v4_days``/``v6_days``) — le cœur commun à la vue
+    d'ensemble, à la série temporelle et à l'historique par paire.
+
+    Un voisin direct est l'AS immédiatement adjacent à un membre du
+    périmètre dans un chemin observé — pas de complétion vers des AS non
+    vus sur un chemin réel (voir ADR 0004, même principe pour le graphe de
+    propagation). Un même voisin peut apparaître une fois par membre auquel
+    il est directement adjacent.
+    """
     elements = data.table("bgp_elements")
     members = set(asns)
     clause = " OR ".join(["list_contains(as_path_dedup, ?)"] * len(asns))
@@ -220,13 +250,7 @@ def _neighbors(
             FROM {elements} WHERE ({clause}) AND ts >= ? AND ts <= ?""",
         [*asns, start, end + "T23:59:59"],
     )
-
-    # Un voisin direct est l'AS immédiatement adjacent à un membre du
-    # périmètre dans un chemin observé — pas de complétion vers des AS non
-    # vus sur un chemin réel (voir ADR 0004, même principe pour le futur
-    # graphe de nœuds). (membre, voisin) est la clé : un même voisin peut
-    # apparaître une fois par membre auquel il est directement adjacent.
-    pairs: dict[tuple[int, int], dict[str, Any]] = {}
+    pairs: dict[tuple[int, int], dict[str, set[str]]] = {}
     for r in rows:
         path: list[int] = r["as_path_dedup"]
         for idx, node in enumerate(path):
@@ -236,26 +260,36 @@ def _neighbors(
                 if not (0 <= j < len(path)) or path[j] == node:
                     continue
                 key = (node, path[j])
-                entry = pairs.setdefault(key, {"days": set(), "v4": 0, "v6": 0})
+                entry = pairs.setdefault(key, {"days": set(), "v4_days": set(), "v6_days": set()})
                 entry["days"].add(r["day"])
-                if r["prefix_ip_version"] == 4:
-                    entry["v4"] += 1
-                else:
-                    entry["v6"] += 1
+                entry["v4_days" if r["prefix_ip_version"] == 4 else "v6_days"].add(r["day"])
+    return pairs
 
-    index = RelationshipIndex(
+
+def _relationship_index(data: DataAccess) -> RelationshipIndex:
+    return RelationshipIndex(
         _load_reference(data.settings, "ref_as_rel"),
         _load_reference(data.settings, "ref_as_rel_evidence"),
     )
-    countries = {
+
+
+def _asn_countries(data: DataAccess) -> dict[int, str]:
+    if not data.exists("ref_asn"):
+        return {}
+    return {
         int(r["asn"]): r["country_iso2"]
-        for r in (
-            data.query(f"SELECT asn, country_iso2 FROM {data.table('ref_asn')}")
-            if data.exists("ref_asn")
-            else []
-        )
+        for r in data.query(f"SELECT asn, country_iso2 FROM {data.table('ref_asn')}")
     }
+
+
+def _neighbors_overview(
+    data: DataAccess, asns: list[int], relation: str, tab: str, start: str, end: str
+) -> list[dict[str, Any]]:
+    pairs = _neighbor_pairs_by_day(data, asns, start, end)
+    index = _relationship_index(data)
+    countries = _asn_countries(data)
     names = org_names(data, [n for _, n in pairs])
+    all_days = _date_range(start, end)
 
     items: list[dict[str, Any]] = []
     for (member, n), entry in pairs.items():
@@ -263,6 +297,9 @@ def _neighbors(
         if relation != "all" and bucket != relation:
             continue
         days = sorted(entry["days"])
+        change = classify_presence(days, all_days, all_days[0], all_days[-1])
+        if tab != "all" and change != tab:
+            continue
         items.append(
             {
                 "member_asn": member,
@@ -271,16 +308,31 @@ def _neighbors(
                 "country_iso2": countries.get(n),
                 "relation": bucket,
                 "active": days[-1] == end,
-                "has_v4": entry["v4"] > 0,
-                "has_v6": entry["v6"] > 0,
-                "v4_prefixes": entry["v4"],
-                "v6_prefixes": entry["v6"],
+                "change": change,
+                "has_v4": bool(entry["v4_days"]),
+                "has_v6": bool(entry["v6_days"]),
                 "first_seen": days[0],
                 "last_seen": days[-1],
             }
         )
     items.sort(key=lambda i: (i["member_asn"], i["asn"]))
     return items
+
+
+def _neighbors_timeseries(
+    data: DataAccess, asns: list[int], relation: str, start: str, end: str
+) -> list[dict[str, Any]]:
+    pairs = _neighbor_pairs_by_day(data, asns, start, end)
+    index = _relationship_index(data)
+    all_days = _date_range(start, end)
+    counts = dict.fromkeys(all_days, 0)
+    for (member, n), entry in pairs.items():
+        bucket = _RELATION_BUCKET[index.get(n, member).value]
+        if relation != "all" and bucket != relation:
+            continue
+        for d in entry["days"]:
+            counts[d] += 1
+    return [{"day": d, "neighbors": counts[d]} for d in all_days]
 
 
 # ---------------------------------------------------------------------------
@@ -321,8 +373,35 @@ def asn_prefixes_changes(
     return {"asn": asn, "start": start, "end": end, "items": items}
 
 
-@router.get("/asns/{asn}/neighbors", summary="Voisins BGP directs, par type de relation")
-def asn_neighbors(
+@router.get(
+    "/asns/{asn}/prefixes/{prefix:path}/history",
+    summary="Périodes d'annonce d'un préfixe par cet AS",
+)
+def asn_prefix_history(
+    asn: int,
+    prefix: str,
+    date_from: datetime | None = Query(None, alias="from"),
+    date_to: datetime | None = Query(None, alias="to"),
+    data: DataAccess = Depends(get_data_access),
+) -> dict[str, Any]:
+    bounds = _day_bounds(data, _asn_scope(asn), date_from, date_to)
+    if bounds is None:
+        return {"asn": asn, "prefix": prefix, "start": None, "end": None, "items": []}
+    start, end = bounds
+    elements = data.table("bgp_elements")
+    rows = data.query(
+        f"""SELECT DISTINCT strftime(ts, '%Y-%m-%d') AS day FROM {elements}
+            WHERE origin_asn = ? AND prefix = ? AND ts >= ? AND ts <= ?""",
+        [asn, prefix, start, end + "T23:59:59"],
+    )
+    all_days = _date_range(start, end)
+    runs = _presence_runs(sorted(r["day"] for r in rows), all_days)
+    items = [{"first_seen": a, "last_seen": b, "active": b == end} for a, b in runs]
+    return {"asn": asn, "prefix": prefix, "start": start, "end": end, "items": items}
+
+
+@router.get("/asns/{asn}/neighbors/timeseries", summary="Nombre de voisins BGP par jour")
+def asn_neighbors_timeseries(
     asn: int,
     relation: str = Query("all", pattern="^(all|providers|customers|peerings|unspecified)$"),
     date_from: datetime | None = Query(None, alias="from"),
@@ -331,12 +410,74 @@ def asn_neighbors(
 ) -> dict[str, Any]:
     bounds = _day_bounds(data, _asn_scope(asn), date_from, date_to)
     if bounds is None:
+        return {"asn": asn, "relation": relation, "points": []}
+    start, end = bounds
+    return {
+        "asn": asn,
+        "relation": relation,
+        "points": _neighbors_timeseries(data, _asn_scope(asn), relation, start, end),
+    }
+
+
+@router.get("/asns/{asn}/neighbors", summary="Voisins BGP directs, par type de relation")
+def asn_neighbors(
+    asn: int,
+    relation: str = Query("all", pattern="^(all|providers|customers|peerings|unspecified)$"),
+    tab: str = Query("all", pattern="^(all|new|left|unstable)$"),
+    date_from: datetime | None = Query(None, alias="from"),
+    date_to: datetime | None = Query(None, alias="to"),
+    data: DataAccess = Depends(get_data_access),
+) -> dict[str, Any]:
+    bounds = _day_bounds(data, _asn_scope(asn), date_from, date_to)
+    if bounds is None:
         return {"asn": asn, "start": None, "end": None, "items": []}
     start, end = bounds
-    items = _neighbors(data, _asn_scope(asn), relation, start, end)
+    items = _neighbors_overview(data, _asn_scope(asn), relation, tab, start, end)
     for item in items:
         item.pop("member_asn", None)  # un seul AS dans le périmètre : redondant ici
     return {"asn": asn, "start": start, "end": end, "items": items}
+
+
+@router.get(
+    "/asns/{asn}/neighbors/{neighbor}/history",
+    summary="Historique de la relation entre deux AS (IPv4/IPv6)",
+)
+def asn_neighbor_history(
+    asn: int,
+    neighbor: int,
+    date_from: datetime | None = Query(None, alias="from"),
+    date_to: datetime | None = Query(None, alias="to"),
+    data: DataAccess = Depends(get_data_access),
+) -> dict[str, Any]:
+    empty: dict[str, Any] = {
+        "asn": asn,
+        "neighbor": neighbor,
+        "start": None,
+        "end": None,
+        "ipv4": [],
+        "ipv6": [],
+    }
+    bounds = _day_bounds(data, _asn_scope(asn), date_from, date_to)
+    if bounds is None:
+        return empty
+    start, end = bounds
+    pairs = _neighbor_pairs_by_day(data, [asn], start, end)
+    entry = pairs.get((asn, neighbor))
+    if entry is None:
+        return {**empty, "start": start, "end": end}
+    # Le code brut ("p2c", "c2p", "p2p", "s2s", "unknown") vient de
+    # l'instantané *courant* de ref_as_rel, appliqué à toute la fenêtre :
+    # les données de démo ne font jamais varier le type dans le temps, une
+    # historisation jour par jour du type serait donc prématurée ici.
+    rel_type = _relationship_index(data).get(neighbor, asn).value
+    all_days = _date_range(start, end)
+    result: dict[str, Any] = {"asn": asn, "neighbor": neighbor, "start": start, "end": end}
+    for family_key, days_key in (("ipv4", "v4_days"), ("ipv6", "v6_days")):
+        runs = _presence_runs(sorted(entry[days_key]), all_days)
+        result[family_key] = [
+            {"first_seen": a, "last_seen": b, "active": b == end, "type": rel_type} for a, b in runs
+        ]
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -409,11 +550,34 @@ def country_prefixes_changes(
 
 
 @router.get(
+    "/countries/{iso2}/neighbors/timeseries", summary="Nombre de voisins BGP par jour (pays)"
+)
+def country_neighbors_timeseries(
+    iso2: str,
+    relation: str = Query("all", pattern="^(all|providers|customers|peerings|unspecified)$"),
+    date_from: datetime | None = Query(None, alias="from"),
+    date_to: datetime | None = Query(None, alias="to"),
+    data: DataAccess = Depends(get_data_access),
+) -> dict[str, Any]:
+    members = _require_country_scope(data, iso2)
+    bounds = _day_bounds(data, members, date_from, date_to)
+    if bounds is None:
+        return {"country_iso2": iso2.upper(), "relation": relation, "points": []}
+    start, end = bounds
+    return {
+        "country_iso2": iso2.upper(),
+        "relation": relation,
+        "points": _neighbors_timeseries(data, members, relation, start, end),
+    }
+
+
+@router.get(
     "/countries/{iso2}/neighbors", summary="Voisins BGP directs des AS d'un pays, par relation"
 )
 def country_neighbors(
     iso2: str,
     relation: str = Query("all", pattern="^(all|providers|customers|peerings|unspecified)$"),
+    tab: str = Query("all", pattern="^(all|new|left|unstable)$"),
     date_from: datetime | None = Query(None, alias="from"),
     date_to: datetime | None = Query(None, alias="to"),
     data: DataAccess = Depends(get_data_access),
@@ -430,7 +594,7 @@ def country_neighbors(
         "country_iso2": iso2.upper(),
         "start": start,
         "end": end,
-        "items": _neighbors(data, members, relation, start, end),
+        "items": _neighbors_overview(data, members, relation, tab, start, end),
     }
 
 

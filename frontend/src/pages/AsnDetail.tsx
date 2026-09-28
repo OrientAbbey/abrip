@@ -149,8 +149,14 @@ export default function AsnDetail() {
                 basePath={`/asns/${data.asn}`}
                 contextLabel="AS spécifié"
                 contextValue={`AS${data.asn}`}
+                originAsn={data.asn}
+                originName={asName}
               />
-              <AsnNeighborsPanel basePath={`/asns/${data.asn}`} />
+              <AsnNeighborsPanel
+                basePath={`/asns/${data.asn}`}
+                originAsn={data.asn}
+                originName={asName}
+              />
 
               <section className="card">
                 <h2>Activité dans le temps</h2>
