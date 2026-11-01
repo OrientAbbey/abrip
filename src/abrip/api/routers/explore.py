@@ -6,10 +6,29 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+from abrip.analytics.daily import PREFIX_ORIGIN, summary_is_current
 from abrip.api.deps import DataAccess, clamp_limit, get_data_access
 from abrip.api.schemas import AsnSummary, Page, PrefixSummary, SearchHit
 
 router = APIRouter(tags=["exploration"])
+
+
+@router.get("/asns/names", summary="Table de correspondance ASN → nom, pour l'affichage")
+def asn_names(data: DataAccess = Depends(get_data_access)) -> dict[str, str]:
+    """Nom court (AS2Org ``aut_name``) ou, à défaut, nom d'organisation, par ASN.
+
+    Une seule table, chargée une fois côté client (voir ``useAsnNames`` côté
+    frontend) : ``ref_as_org`` reste petite (quelques milliers de lignes au
+    plus), un aller-retour suffit plutôt qu'une jointure par composant.
+    """
+    if not data.exists("ref_as_org"):
+        return {}
+    rows = data.query(
+        f"""SELECT asn, coalesce(asn_name, org_name) AS name
+            FROM {data.table("ref_as_org")}
+            WHERE coalesce(asn_name, org_name) IS NOT NULL"""
+    )
+    return {str(row["asn"]): row["name"] for row in rows}
 
 
 @router.get("/asns", response_model=Page[AsnSummary], summary="Systèmes autonomes suivis")
@@ -43,17 +62,32 @@ def list_asns(
         "r.country_iso2, r.is_african" if ref else "NULL AS country_iso2, false AS is_african"
     )
 
-    base = f"""
-        SELECT e.origin_asn AS asn, {ref_cols},
-               count(DISTINCT e.prefix) AS prefixes,
-               count(*) AS updates
-        FROM {elements} e
-        {ref_join}
-        WHERE {" AND ".join(conditions)}
-        GROUP BY 1, 2, 3
-    """
+    if data.exists(PREFIX_ORIGIN) and summary_is_current(data.settings, PREFIX_ORIGIN):
+        # Même agrégat depuis la table journalière (0,6 s -> 0,05 s à 50 M de lignes) :
+        # `updates` y est la somme annonces + retraits + RIB, comme le count(*) d'origine.
+        base = f"""
+            SELECT e.origin_asn AS asn, {ref_cols},
+                   count(DISTINCT e.prefix) AS prefixes,
+                   sum(e.announcements + e.withdrawals + e.ribs) AS updates
+            FROM {data.table(PREFIX_ORIGIN)} e
+            {ref_join}
+            WHERE {" AND ".join(conditions)}
+            GROUP BY 1, 2, 3
+        """
+    else:
+        base = f"""
+            SELECT e.origin_asn AS asn, {ref_cols},
+                   count(DISTINCT e.prefix) AS prefixes,
+                   count(*) AS updates
+            FROM {elements} e
+            {ref_join}
+            WHERE {" AND ".join(conditions)}
+            GROUP BY 1, 2, 3
+        """
     total = int(data.scalar(f"SELECT count(*) FROM ({base})", params) or 0)
-    rows = data.query(f"{base} ORDER BY updates DESC LIMIT ? OFFSET ?", [*params, limit, offset])
+    rows = data.query(
+        f"{base} ORDER BY updates DESC, asn LIMIT ? OFFSET ?", [*params, limit, offset]
+    )
 
     up_by_asn = {}
     if upstream and rows:
@@ -161,23 +195,45 @@ def list_prefixes(
     data: DataAccess = Depends(get_data_access),
 ) -> Page[PrefixSummary]:
     limit = clamp_limit(limit)
-    elements = data.table("bgp_elements")
-    conditions = ["elem_type <> 'R'"]
     params: list[object] = []
-    if q:
-        conditions.append("prefix LIKE ?")
-        params.append(f"{q}%")
-    if origin_asn is not None:
-        conditions.append("origin_asn = ?")
-        params.append(origin_asn)
-
-    base = f"""
-        SELECT prefix, mode(origin_asn) AS origin_asn, count(*) AS updates,
-               count(DISTINCT origin_asn) AS distinct_origins
-        FROM {elements} WHERE {" AND ".join(conditions)} GROUP BY 1
-    """
+    if data.exists(PREFIX_ORIGIN) and summary_is_current(data.settings, PREFIX_ORIGIN):
+        # Depuis la table journalière : quelques centaines de milliers de lignes au lieu
+        # de tout bgp_elements (4,8 s à 50 M de lignes, voir docs/performances.md).
+        conditions = ["TRUE"]
+        if q:
+            conditions.append("prefix LIKE ?")
+            params.append(f"{q}%")
+        if origin_asn is not None:
+            conditions.append("origin_asn = ?")
+            params.append(origin_asn)
+        base = f"""
+            SELECT prefix, arg_max(origin_asn, upd) FILTER (WHERE origin_asn IS NOT NULL) AS origin_asn,
+                   sum(upd) AS updates, count(DISTINCT origin_asn) AS distinct_origins
+            FROM (SELECT prefix, origin_asn, sum(announcements + withdrawals) AS upd
+                  FROM {data.table(PREFIX_ORIGIN)} WHERE {" AND ".join(conditions)}
+                  GROUP BY 1, 2)
+            GROUP BY 1 HAVING sum(upd) > 0
+        """
+    else:
+        elements = data.table("bgp_elements")
+        conditions = ["elem_type <> 'R'"]
+        if q:
+            conditions.append("prefix LIKE ?")
+            params.append(f"{q}%")
+        if origin_asn is not None:
+            conditions.append("origin_asn = ?")
+            params.append(origin_asn)
+        base = f"""
+            SELECT prefix, mode(origin_asn) AS origin_asn, count(*) AS updates,
+                   count(DISTINCT origin_asn) AS distinct_origins
+            FROM {elements} WHERE {" AND ".join(conditions)} GROUP BY 1
+        """
     total = int(data.scalar(f"SELECT count(*) FROM ({base})", params) or 0)
-    rows = data.query(f"{base} ORDER BY updates DESC LIMIT ? OFFSET ?", [*params, limit, offset])
+    # Départage par préfixe : sans cela, deux préfixes à égalité d'activité changent
+    # de page d'un appel à l'autre.
+    rows = data.query(
+        f"{base} ORDER BY updates DESC, prefix LIMIT ? OFFSET ?", [*params, limit, offset]
+    )
 
     visibility: dict[str, float] = {}
     if data.exists("metric_visibility") and rows:

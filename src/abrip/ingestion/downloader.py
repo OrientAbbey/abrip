@@ -19,7 +19,7 @@ import httpx
 
 from abrip.config import Settings
 from abrip.ingestion.broker import MRTFile
-from abrip.logging_conf import get_logger
+from abrip.logging_conf import get_logger, log_http_error
 from abrip.storage.catalog import Catalog
 
 log = get_logger(__name__)
@@ -88,7 +88,9 @@ class Downloader:
                         status="failed",
                         error=str(exc)[:500],
                     )
-                    log.warning("téléchargement échoué", extra={"url": mrt.url, "error": str(exc)})
+                    log_http_error(
+                        log, "téléchargement échoué", exc, url=mrt.url, collector=mrt.collector
+                    )
                 else:
                     report.downloaded += 1
                     report.bytes_total += size

@@ -85,6 +85,8 @@ Dans **Settings → Variables and secrets** :
 |---|---|---|
 | `ABRIP_API__CORS_ORIGINS` | `[]` | inutile : le frontend est servi par la même origine |
 | `ABRIP_LOG_LEVEL` | `INFO` | passez à `WARNING` pour alléger les journaux |
+| `ABRIP_LOG_FILE` | `logs/abrip.log` | journal JSON, relatif à `ABRIP_DATA_DIR` ; rotation `ABRIP_LOG_MAX_BYTES` (10 Mo) × `ABRIP_LOG_BACKUP_COUNT` (5) |
+| `ABRIP_INGESTION__ARCHIVE_ROOT` | JSON, ex. `{"routeviews": "https://miroir…", "riperis": "…", "pch": "…"}` | changer de miroir d'archives sans toucher au code (donner les trois projets) |
 
 Aucune n'est obligatoire : l'image démarre correctement sans configuration.
 
@@ -163,7 +165,7 @@ Fly demande une carte bancaire même pour rester dans l'enveloppe gratuite, ce q
 
 ## Vérifier un déploiement
 
-Quel que soit l'hébergeur, ces quatre appels valident le déploiement :
+Quel que soit l'hébergeur, ces appels valident le déploiement :
 
 ```bash
 BASE=https://votre-instance
@@ -179,9 +181,13 @@ curl -sI $BASE/ | head -1          # doit répondre 200 et du HTML
 
 # 4. Le routage côté client fonctionne après rechargement
 curl -sI $BASE/events | head -1    # doit aussi répondre 200, pas 404
+
+# 5. Les noms d'AS (AS2Org) sont servis, et le graphe de propagation répond
+curl -s $BASE/api/asns/names | head -c 200
+curl -s "$BASE/api/prefixes/197.155.64.0%2F22/propagation" | head -c 200
 ```
 
-Si `/api/health` renvoie des couches `present: false`, la génération du jeu de démonstration a échoué pendant la construction. Les journaux de build le montrent : l'étape `abrip demo verify` échoue bruyamment plutôt que de laisser passer une image vide.
+Un `/api/health` qui répond `degraded` signale l'absence de `bgp_elements` ou d'`events` : la route répond quand même (HTTP 200), c'est son rôle. Si `/api/health` renvoie des couches `present: false`, la génération du jeu de démonstration a échoué pendant la construction. Les journaux de build le montrent : l'étape `abrip demo verify` échoue bruyamment plutôt que de laisser passer une image vide.
 
 ---
 
@@ -278,6 +284,48 @@ abrip ingest broker --from 2026-08-01 --to 2026-08-07
 abrip etl curate  --from 2026-08-01 --to 2026-08-07
 abrip analytics compute --from 2026-08-01 --to 2026-08-07
 abrip detect run --from 2026-08-01 --to 2026-08-07
+```
+
+### Mise à jour d'une installation existante
+
+Les partitions `bgp_elements` sont triées par (prefix, ts) à l'écriture depuis la
+version qui introduit `etl.sort_partitions`. Celles déjà écrites ne le sont pas, et
+portent `collector` en `Categorical` : polars refuse de lire ensemble les deux
+formes. Après la mise à jour, une seule fois :
+
+```bash
+abrip etl compact        # trie les anciennes partitions ; idempotent
+abrip analytics compute --from <premier jour> --to <dernier jour>   # tables journalières
+```
+
+La seconde commande produit les tables journalières (`daily_prefix_origin`,
+`daily_adjacency`) qui rendent rapides les pages par AS et la liste des préfixes. Sans
+elles — ou après une nouvelle curation, qui les rend périmées — l'API répond quand même,
+par le calcul direct, plus lent mais identique.
+
+Détails et mesures : [performances.md](performances.md).
+
+### Premier essai réel : un collecteur, un jour
+
+Le parcours sur données réelles n'a pas pu être exécuté de bout en bout par les auteurs : l'environnement de développement n'atteint ni RouteViews, ni RIPE, ni IODA, ni PeeringDB. Ce qui est vérifié, c'est le comportement **quand les sources sont injoignables** (tests `tests/test_hors_demo.py` et essai manuel) ; ce qui ne l'est pas, c'est le succès sur de vraies archives. Commencez petit, depuis un poste qui a accès à Internet :
+
+```bash
+export ABRIP_DATA_DIR=./data-reel            # ne mélange pas avec la démonstration
+abrip ingest broker --from AAAA-MM-JJ --to AAAA-MM-JJ --collectors rrc19 --dry-run
+abrip ingest broker --from AAAA-MM-JJ --to AAAA-MM-JJ --collectors rrc19   # un jour d'updates
+abrip reference sync --sources afrinic,rpki,caida
+abrip etl curate --from AAAA-MM-JJ --to AAAA-MM-JJ
+abrip analytics compute --from AAAA-MM-JJ --to AAAA-MM-JJ
+abrip detect run --from AAAA-MM-JJ --to AAAA-MM-JJ
+abrip ingest ris-live --duration 30          # flux temps réel, 30 secondes
+```
+
+Points à contrôler, dans l'ordre : le nombre de fichiers téléchargés (`downloaded`) ; des lignes dans `ref_asn`, `ref_roa` et `ref_as_rel` ; un `abrip demo verify` **ne s'applique pas** (il vérifie la vérité terrain de la démonstration) — regardez plutôt `/api/health` et les événements produits. Le parseur PCH n'a été testé que sur un échantillon synthétique : tout écart de format apparaîtra dans le journal.
+
+Quand une source ne répond pas, les commandes le disent plutôt que de réussir en silence : `abrip reference sync` et `abrip ingest broker` sortent avec le code 1 si rien n'a pu être récupéré, et le journal (`data/logs/abrip.log`) donne pour chaque échec le type d'erreur, la méthode, l'URL et le statut HTTP éventuel :
+
+```bash
+jq 'select(.level == "WARNING") | {message, error_type, method, url, status_code}' data/logs/abrip.log
 ```
 
 Deux façons de publier le résultat, selon le volume :

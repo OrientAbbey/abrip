@@ -39,7 +39,12 @@ class TestSante:
         response = client.get("/api/health")
         assert response.status_code == 200
         body = response.json()
-        assert body["status"] == "ok"
+        # Avec le jeu de démonstration : « ok ». Sur une installation sans
+        # données : « degraded » (couches bgp_elements/events absentes) — la
+        # route répond quand même, c'est tout son intérêt.
+        assert body["status"] in {"ok", "degraded"}
+        if (get_settings().curated_dir / "bgp_elements").exists():
+            assert body["status"] == "ok"
         assert isinstance(body["layers"], list)
 
     def test_collecteurs_listes(self, client):

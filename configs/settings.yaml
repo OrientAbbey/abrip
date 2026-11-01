@@ -1,5 +1,9 @@
 data_dir: ./data
 log_level: INFO
+# Chemin relatif à data_dir (sauf si absolu). Rotation par taille.
+log_file: logs/abrip.log
+log_max_bytes: 10000000
+log_backup_count: 5
 
 ingestion:
   broker_url: https://api.bgpkit.com/v3/broker/search
@@ -9,6 +13,18 @@ ingestion:
   concurrency: 3
   raw_retention_days: 30
   request_timeout: 120
+  # Racine d'archive par projet — à corriger ici en cas de migration
+  # d'hébergement, sans toucher au code (voir ingestion/broker.py).
+  archive_root:
+    routeviews: https://archive.routeviews.org
+    riperis: https://data.ris.ripe.net
+    pch: https://downloads.pch.net/files/Routing_Data/IPv4_daily_snapshots
+  # Cadence de publication par projet, en minutes.
+  cadence:
+    routeviews: {rib: 120, updates: 15}
+    riperis: {rib: 480, updates: 5}
+    pch: {rib: 1440, updates: 1440}
+  ris_live_url: "wss://ris-live.ripe.net/v1/ws/?client=abrip"
 
 etl:
   parser: auto            # auto | bgpkit | mrtparse
@@ -16,6 +32,9 @@ etl:
   compression: zstd
   keep_communities: true
   drop_ipv6: false
+  sort_partitions: true     # trier bgp_elements par (prefix, ts) : requêtes par préfixe plus rapides
+  row_group_size: 100000
+  sort_memory_limit: 1GB    # le tri déborde sur disque au-delà
 
 reference:
   afrinic_delegated_url: https://ftp.afrinic.net/pub/stats/afrinic/delegated-afrinic-extended-latest
@@ -28,6 +47,9 @@ reference:
   caida_as_rel_base: https://publicdata.caida.org/datasets/as-relationships/serial-2/
   caida_as_org_base: https://publicdata.caida.org/datasets/as-organizations/
   extra_african_asns: []
+  # L6 (filtre 3) — catalogue public d'anycast (bgp.tools/anycatch).
+  anycast_v4_url: https://raw.githubusercontent.com/bgptools/anycast-prefixes/master/anycatch-v4-prefixes.csv
+  anycast_v6_url: https://raw.githubusercontent.com/bgptools/anycast-prefixes/master/anycatch-v6-prefixes.csv
 
 analytics:
   windows: ["5m", "1h", "24h"]
@@ -51,6 +73,8 @@ enrichment:
   dataplane_min_severity: watch      # ne pas dépenser d'appels réseau sur les `info`
   ioda_base_url: https://api.ioda.inetintel.cc.gatech.edu/v2
   ripe_atlas_base_url: https://atlas.ripe.net/api/v2
+  ioda_outage_threshold: 0.5
+  atlas_connected_floor: 0.6
   peeringdb_base_url: https://www.peeringdb.com/api
   relationship_min_sources_for_critical: 2
   ripedb_base_url: https://rest.db.ripe.net

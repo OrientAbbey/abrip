@@ -90,3 +90,12 @@ export const COUNTRY_LABEL: Record<string, string> = {
 
 export const countryLabel = (iso2: string | null | undefined): string =>
   !iso2 ? "—" : (COUNTRY_LABEL[iso2] ?? iso2);
+
+export const RELATION_LABEL: Record<string, string> = {
+  providers: "Fournisseurs",
+  customers: "Clients",
+  peerings: "Peerings",
+  unspecified: "Non déterminé",
+};
+
+export const relationLabel = (key: string): string => RELATION_LABEL[key] ?? key;

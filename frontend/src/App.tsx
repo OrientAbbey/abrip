@@ -2,6 +2,7 @@ import { Suspense, lazy } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { Layout } from "./components/Layout";
 import { Loading } from "./components/StateBlock";
+import { AsnNamesProvider } from "./lib/useAsnNames";
 import Overview from "./pages/Overview";
 
 // Les pages autres que l'accueil sont chargées à la demande : la bibliothèque
@@ -16,10 +17,12 @@ const PrefixDetail = lazy(() =>
   import("./pages/Prefixes").then((m) => ({ default: m.PrefixDetail })),
 );
 const Countries = lazy(() => import("./pages/Countries"));
+const CountryDetail = lazy(() => import("./pages/CountryDetail"));
 const About = lazy(() => import("./pages/About"));
 
 export default function App() {
   return (
+    <AsnNamesProvider>
     <Routes>
       <Route path="/" element={<Layout />}>
         <Route index element={<Overview />} />
@@ -37,6 +40,7 @@ export default function App() {
                     capturer le reste du chemin, pas un segment unique. */}
                 <Route path="prefixes/*" element={<PrefixDetail />} />
                 <Route path="countries" element={<Countries />} />
+                  <Route path="countries/:iso2" element={<CountryDetail />} />
                 <Route path="about" element={<About />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
@@ -45,5 +49,6 @@ export default function App() {
         />
       </Route>
     </Routes>
+    </AsnNamesProvider>
   );
 }

@@ -1,6 +1,7 @@
 import { useApi, useTitle } from "../lib/useApi";
 import type { Health } from "../lib/types";
 import { AsyncBlock } from "../components/StateBlock";
+import { Glossary } from "../components/Term";
 import { dt, num } from "../lib/format";
 
 const DETECTORS: Array<[string, string]> = [
@@ -79,6 +80,13 @@ export default function About() {
           points de vue concordants, et les observations qui l'ont déclenché. Quand plusieurs
           détecteurs pointent le même préfixe dans la même fenêtre, ils sont regroupés en incident.
         </p>
+      </section>
+
+      <section className="card">
+        <h2>Glossaire des indicateurs</h2>
+        <Glossary
+          keys={["hhi", "dependency", "visibility", "upstreams", "coverage", "roa", "asnsObserved", "prefixesVisible", "windows"]}
+        />
       </section>
 
       <section className="card prose">

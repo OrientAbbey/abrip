@@ -10,6 +10,7 @@ detectors:
     stability_min_days_seen: 3
     ignore_authorised_origins: true   # L4a — ROA multi-origine ou objet route IRR cohérent
     ignore_known_anycast: true        # L6 — catalogue public + chemins divergents
+    anycast_overlap_ceiling: 0.5      # recouvrement max toléré entre chemins (Jaccard)
     min_duration_minutes: 5
     score_weight: 0.30
   subprefix:

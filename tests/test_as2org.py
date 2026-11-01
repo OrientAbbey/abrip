@@ -53,6 +53,25 @@ class TestParseAs2Org:
 
 
 class TestSiblingAsns:
+    def test_nom_court_de_l_as_conserve(self, as2org_file):
+        # `asn_name` = aut_name CAIDA (nom court, affiché dans l'interface) ;
+        # `org_name` = nom complet de l'organisation.
+        frame = parse_as2org(as2org_file)
+        lignes = {r["asn"]: r for r in frame.to_dicts()}
+        assert lignes[174]["asn_name"] == "COGENT-174"
+        assert lignes[174]["org_name"] == "Cogent Communications"
+        assert lignes[37105]["asn_name"] == "LITTORAL-TELECOM-2"
+        assert lignes[37105]["org_name"] == "Littoral Telecom SA"
+
+    def test_nom_court_present_sans_nom_d_organisation(self, tmp_path):
+        path = tmp_path / "sans-org.txt.gz"
+        with gzip.open(path, "wt", encoding="utf-8") as handle:
+            handle.write(
+                "# format:aut|changed|aut_name|org_id|opaque_id|source\n64500|1|X-NET|ORG-X|a|TEST\n"
+            )
+        ligne = parse_as2org(path).row(0, named=True)
+        assert ligne["asn_name"] == "X-NET" and ligne["org_name"] is None
+
     def test_asn_partageant_une_organisation(self, as2org_file):
         frame = parse_as2org(as2org_file)
         assert sibling_asns(frame, 37100) == {37105}

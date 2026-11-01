@@ -30,7 +30,7 @@ from typing import Any
 import httpx
 import polars as pl
 
-from abrip.logging_conf import get_logger
+from abrip.logging_conf import get_logger, log_http_error
 from abrip.models import REF_AS_REL_EVIDENCE_SCHEMA, Relationship
 from abrip.reference.irr import RipeDbClient
 
@@ -67,7 +67,7 @@ class PeeringDbClient:
             response = self._client.get(path, params=params)
             response.raise_for_status()
         except httpx.HTTPError as exc:
-            log.warning("requête PeeringDB en échec", extra={"path": path, "error": str(exc)})
+            log_http_error(log, "requête PeeringDB en échec", exc, path=path)
             return []
         try:
             return response.json().get("data", [])

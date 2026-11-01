@@ -39,8 +39,14 @@ console = Console()
 
 def _bootstrap_runtime():
     settings = get_settings()
-    setup_logging(settings.log_level, json_output=False)
     settings.ensure_dirs()
+    setup_logging(
+        settings.log_level,
+        json_output=False,
+        log_path=str(settings.log_path),
+        max_bytes=settings.log_max_bytes,
+        backup_count=settings.log_backup_count,
+    )
     from abrip.storage.catalog import Catalog
 
     return settings, Catalog(settings.catalog_path)
@@ -120,6 +126,14 @@ def ingest_broker(
 
     console.print(f"Fichiers identifiés : {len(files)}")
     console.print(json.dumps(report.as_dict(), indent=2))
+    if not dry_run and report.failed and not report.downloaded:
+        typer.secho(
+            f"Aucun fichier téléchargé ({report.failed} échecs) : vérifier l'accès réseau — "
+            "détails dans le journal (data/logs/abrip.log).",
+            err=True,
+            fg=typer.colors.YELLOW,
+        )
+        raise typer.Exit(code=1)
 
 
 @ingest_app.command("purge")
@@ -158,6 +172,17 @@ def reference_sync(
 
     result = sync_references(settings, catalog, _split(sources) or [])
     console.print(json.dumps(result, indent=2, default=str))
+    rows = result.get("rows") or {}
+    if rows and not any(rows.values()):
+        # Toutes les sources ont rendu 0 ligne : réseau coupé ou sources bloquées.
+        # Sortir en « succès » ferait croire à un référentiel à jour (cron, CI).
+        typer.secho(
+            "Aucun référentiel synchronisé (0 ligne) : vérifier l'accès réseau — "
+            "détails dans le journal (data/logs/abrip.log).",
+            err=True,
+            fg=typer.colors.YELLOW,
+        )
+        raise typer.Exit(code=1)
 
 
 # --- ETL -------------------------------------------------------------------
@@ -176,6 +201,19 @@ def etl_curate(
         settings, catalog, _parse_date(from_), _parse_date(to), _split(collectors), synthetic
     )
     console.print(json.dumps(totals, indent=2))
+
+
+@etl_app.command("compact")
+def etl_compact() -> None:
+    """Trie les partitions bgp_elements existantes par (prefix, ts).
+
+    À lancer une fois après une mise à jour : les nouvelles partitions sont
+    triées à l'écriture, pas les anciennes. Idempotent.
+    """
+    settings, _catalog = _bootstrap_runtime()
+    from abrip.etl.curate import compact_bgp_elements
+
+    console.print(json.dumps(compact_bgp_elements(settings), indent=2))
 
 
 # --- analytics -------------------------------------------------------------

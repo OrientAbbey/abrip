@@ -16,6 +16,7 @@
 import {
   Area,
   Bar,
+  Brush,
   CartesianGrid,
   ComposedChart,
   Legend,
@@ -56,6 +57,16 @@ interface Props {
   valueFormat?: (value: number) => string;
   note?: string;
   stacked?: boolean;
+  /** Affiche une poignée de sélection sous le graphique. `onBrush` reçoit les
+   *  instants (ms epoch) de début et de fin de la sélection : c'est ce qui
+   *  permet à un graphique de piloter le tableau placé en dessous. */
+  brush?: boolean;
+  onBrush?: (fromMs: number, toMs: number) => void;
+  /** Courbe en escalier : pour des comptages entiers, un lissage inventerait
+   *  des valeurs intermédiaires (« 1,5 voisin ») qui n'existent pas. */
+  step?: boolean;
+  /** Axe et infobulle en jours (sans l'heure), pour des points journaliers. */
+  daily?: boolean;
 }
 
 const AXIS_STYLE = { fill: "#63819a", fontSize: 11, fontFamily: "ui-monospace, Menlo, monospace" };
@@ -66,6 +77,10 @@ const fmtTick = (value: number): string =>
 const fmtFull = (value: number): string =>
   `${new Date(value).toISOString().slice(0, 16).replace("T", " ")} UTC`;
 
+// Données journalières : l'heure (toujours 00:00) n'est que du bruit.
+const fmtDayTick = (value: number): string => new Date(value).toISOString().slice(5, 10);
+const fmtDayFull = (value: number): string => new Date(value).toISOString().slice(0, 10);
+
 export function TimeChart({
   points,
   series,
@@ -75,7 +90,14 @@ export function TimeChart({
   valueFormat = (v) => new Intl.NumberFormat("fr-FR").format(Math.round(v * 1000) / 1000),
   note,
   stacked = false,
+  brush = false,
+  onBrush,
+  step = false,
+  daily = false,
 }: Props) {
+  const tickFmt = daily ? fmtDayTick : fmtTick;
+  const fullFmt = daily ? fmtDayFull : fmtFull;
+  const curve = step ? "stepAfter" : "monotone";
   if (points.length === 0) {
     return <p className="muted">Pas de point à afficher sur cette fenêtre.</p>;
   }
@@ -93,7 +115,7 @@ export function TimeChart({
             type="number"
             scale="time"
             domain={["dataMin", "dataMax"]}
-            tickFormatter={fmtTick}
+            tickFormatter={tickFmt}
             tick={AXIS_STYLE}
             stroke="#cfd8d4"
             minTickGap={48}
@@ -106,7 +128,7 @@ export function TimeChart({
             width={56}
           />
           <Tooltip
-            labelFormatter={(value) => fmtFull(Number(value))}
+            labelFormatter={(value) => fullFmt(Number(value))}
             formatter={(value, name) => [
               typeof value === "number" ? valueFormat(value) : String(value),
               labels[String(name)] ?? String(name),
@@ -156,7 +178,7 @@ export function TimeChart({
               return (
                 <Area
                   key={s.key}
-                  type="monotone"
+                  type={curve}
                   dataKey={s.key}
                   name={s.key}
                   stroke={s.color}
@@ -170,7 +192,7 @@ export function TimeChart({
             return (
               <Line
                 key={s.key}
-                type="monotone"
+                type={curve}
                 dataKey={s.key}
                 name={s.key}
                 stroke={s.color}
@@ -182,6 +204,20 @@ export function TimeChart({
               />
             );
           })}
+          {brush && rows.length > 1 && (
+            <Brush
+              dataKey="t"
+              height={22}
+              stroke="#63819a"
+              travellerWidth={8}
+              tickFormatter={(value) => tickFmt(Number(value))}
+              onDragEnd={(range) => {
+                const start = rows[range.startIndex ?? 0]?.t;
+                const end = rows[range.endIndex ?? rows.length - 1]?.t;
+                if (start !== undefined && end !== undefined && onBrush) onBrush(start, end);
+              }}
+            />
+          )}
         </ComposedChart>
       </ResponsiveContainer>
       {note && <figcaption className="card-note">{note}</figcaption>}

@@ -14,11 +14,10 @@ from pathlib import Path
 from typing import Any
 
 from abrip.config import Settings
-from abrip.logging_conf import get_logger
+from abrip.logging_conf import get_logger, log_http_error
 
 log = get_logger(__name__)
 
-RIS_LIVE_URL = "wss://ris-live.ripe.net/v1/ws/?client=abrip"
 WINDOW = timedelta(minutes=5)
 
 
@@ -62,7 +61,9 @@ async def capture(
 
     while datetime.now(UTC) < deadline:
         try:
-            async with websockets.connect(RIS_LIVE_URL, ping_interval=20) as socket:
+            async with websockets.connect(
+                settings.ingestion.ris_live_url, ping_interval=20
+            ) as socket:
                 await socket.send(json.dumps(subscription))
                 log.info("flux RIS Live connecté", extra={"prefixes": prefixes})
 
@@ -88,7 +89,9 @@ async def capture(
                     handle.write(json.dumps(message["data"], ensure_ascii=False) + "\n")
                     written += 1
         except Exception as exc:
-            log.warning("flux interrompu, reconnexion", extra={"error": str(exc)})
+            log_http_error(
+                log, "flux interrompu, reconnexion", exc, url=settings.ingestion.ris_live_url
+            )
             await asyncio.sleep(3)
 
     if handle:

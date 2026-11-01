@@ -33,7 +33,7 @@ from typing import Any
 import httpx
 import polars as pl
 
-from abrip.logging_conf import get_logger
+from abrip.logging_conf import get_logger, log_http_error
 from abrip.models import REF_IRR_ROUTE_SCHEMA, IrrStatus
 
 log = get_logger(__name__)
@@ -87,7 +87,7 @@ class RipeDbClient:
             )
             response.raise_for_status()
         except httpx.HTTPError as exc:
-            log.warning("requête RIPE DB en échec", extra={"query": query, "error": str(exc)})
+            log_http_error(log, "requête RIPE DB en échec", exc, query=query)
             return []
         try:
             payload = response.json()

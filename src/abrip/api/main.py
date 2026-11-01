@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from abrip import __version__
-from abrip.api.routers import events, explore, metrics, system
+from abrip.api.routers import asn_explorer, events, explore, metrics, propagation, system
 from abrip.config import Settings, get_settings
 from abrip.logging_conf import get_logger, setup_logging
 
@@ -43,7 +43,13 @@ def _error(status_code: int, code: str, message: str, details: dict[str, Any] | 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
-    setup_logging(settings.log_level)
+    settings.ensure_dirs()
+    setup_logging(
+        settings.log_level,
+        log_path=str(settings.log_path),
+        max_bytes=settings.log_max_bytes,
+        backup_count=settings.log_backup_count,
+    )
 
     app = FastAPI(
         title="ABRIP API",
@@ -63,7 +69,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             allow_headers=["*"],
         )
 
-    for router in (system.router, explore.router, metrics.router, events.router):
+    for router in (
+        system.router,
+        # propagation avant explore : `/prefixes/{prefix:path}` avale sinon
+        # `/prefixes/<p>/propagation`.
+        propagation.router,
+        explore.router,
+        asn_explorer.router,
+        metrics.router,
+        events.router,
+    ):
         app.include_router(router, prefix="/api")
 
     # --- erreurs normalisées ------------------------------------------------

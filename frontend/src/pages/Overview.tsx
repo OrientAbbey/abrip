@@ -1,7 +1,11 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useApi, useTitle } from "../lib/useApi";
+import { defaultRange, useDataBounds } from "../lib/useDataBounds";
 import type { CollectorInfo, Overview as OverviewData, Series } from "../lib/types";
 import { AsyncBlock } from "../components/StateBlock";
+import { Term } from "../components/Term";
+import { DateRangeSelector, rangeParams, type DateRange } from "../components/DateRangeSelector";
 import { PALETTE, TimeChart } from "../components/TimeChart";
 import { SeverityBadge } from "../components/Badges";
 import { day, detectorLabel, num, pct } from "../lib/format";
@@ -9,7 +13,10 @@ import { day, detectorLabel, num, pct } from "../lib/format";
 export default function Overview() {
   useTitle("Vue d'ensemble");
   const overview = useApi<OverviewData>("/overview");
-  const visibility = useApi<Series>("/metrics/visibility");
+  const bounds = useDataBounds();
+  const [range, setRange] = useState<DateRange>({ from: "", to: "" });
+  const effectiveRange = range.from ? range : defaultRange(bounds);
+  const visibility = useApi<Series>("/metrics/visibility", rangeParams(effectiveRange));
   const collectors = useApi<CollectorInfo[]>("/meta/collectors");
 
   return (
@@ -40,7 +47,7 @@ export default function Overview() {
                 <span className="hint">{num(data.countries_tracked)} pays représentés</span>
               </div>
               <div className="card stat">
-                <span className="label">Visibilité médiane</span>
+                <span className="label"><Term k="visibility">Visibilité médiane</Term></span>
                 <span className="value">{pct(data.median_visibility)}</span>
                 <span className="hint">part des points de vue voyant le préfixe</span>
               </div>
@@ -135,6 +142,9 @@ export default function Overview() {
 
       <section className="card">
         <h2>Visibilité moyenne des préfixes suivis</h2>
+        <div style={{ margin: "0.4rem 0 0.8rem" }}>
+          <DateRangeSelector bounds={bounds} value={effectiveRange} onChange={setRange} />
+        </div>
         <AsyncBlock state={visibility} rows={3}>
           {(series) => (
             <TimeChart

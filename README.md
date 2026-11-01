@@ -34,13 +34,13 @@ cd frontend && npm install && npm run dev   # http://127.0.0.1:5173
 
 ## Ce que la plateforme produit
 
-Sur le jeu de démonstration (7 jours, 7 collecteurs, 14 préfixes, 9 AS africains dont un couple jumeau pour le filtre L6) :
+Sur le jeu de démonstration (7 jours, 5 collecteurs, 19 préfixes, 12 AS d'origine dont quelques AS fictifs dédiés aux exemples de l'interface) :
 
 | Sortie | Volume |
 |---|---|
-| Éléments BGP curés | 21 011 |
+| Éléments BGP curés | 27 577 |
 | Lignes de snapshots RIB | 4 904 |
-| Points de métriques | 22 217 |
+| Points de métriques | 27 625 |
 | Événements détectés | 16 |
 | Incidents corrélés | 8 |
 | Rappel sur la vérité terrain | 5/5 |
@@ -54,6 +54,44 @@ Les cinq anomalies plantées sont toutes retrouvées, et trois d'entre elles son
 | Fuite de routes sur `102.64.0.0/12` | pic d'instabilité + valley-free |
 | Instabilité sur `196.60.0.0/18` | pic d'instabilité |
 | Chute de visibilité sur `197.32.0.0/13` | chute de visibilité |
+
+---
+
+## Interface web
+
+Servie par l'API sur http://127.0.0.1:8000. Un sélecteur de période (champs de date, boutons 7 j / 30 j / Tout) pilote tous les graphes et tableaux d'une page ; les numéros d'AS s'affichent avec leur nom court quand le référentiel AS2Org le connaît (« AS174 · COGENT-174 »). Les termes techniques (HHI, dépendance, visibilité…) sont soulignés en pointillé : l'infobulle donne la définition, et la page « À propos » en rassemble le glossaire.
+
+| Page | Contenu |
+|---|---|
+| Vue d'ensemble | indicateurs, préfixes les plus instables, répartition par détecteur, visibilité dans le temps |
+| Événements | liste filtrable ; la fiche d'un événement montre les preuves qui le motivent |
+| Systèmes autonomes | fiche d'un AS en cinq sections à onglets (une à la fois, la période analysée reste commune ; la section est dans l'adresse, `?section=neighbours`) : **Préfixes** (courbe du nombre de préfixes, onglets Tous / IPv4 / IPv6 ; tableau Actif, Préfixe, RPKI ROA, Route Object, Historique, avec onglets Tous / New / Left / Unstable ; une poignée sous la courbe restreint la période et le tableau ; « Périodes » ouvre l'**historique d'annonce** du préfixe, période par période, trous compris), **Voisins BGP** (fournisseurs / clients / peerings / non déterminé, graphe et tableau filtrés par le même onglet, plus les onglets Tous / New / Left / Unstable appliqués aux voisins avec la même règle que les préfixes ; un clic sur la frise ouvre l'**historique de la relation** en IPv4 et en IPv6), **Transit** (dépendance, HHI), **Activité** (annonces et retraits), **Événements** |
+| Préfixes | fiche d'un préfixe, origines, ROA, chemins, et **graphe de propagation** réduit aux AS observés — voir l'[ADR 0004](docs/adr/0004-graphe-propagation-prefixe.md). Mode « Instantané » (période de la page) et mode « Rejouer » (tranche horaire de 7 jours au plus : lecture, pas à pas, saut d'un changement à l'autre, repères des événements détectés, liens permanents en pointillé, écart depuis le début). Liens colorés selon la relation, épaisseur = observations ; survol ou clic sur un AS : seuls ses chemins restent en relief ; statut RPKI de chaque origine (ROA ✓ / ✗) et lien en magenta quand un chemin viole le modèle valley-free (fuite probable, même verdict que le détecteur) ; seuil « chemins vus au moins N fois » ; repli des AS hors Afrique (les origines restent visibles) ; export SVG, PNG et CSV des chemins ; la vue entière (filtres, AS épinglé, tranche) est dans l'adresse (`g_*`) et la fiche d'un événement y renvoie. Sous le graphe, **fournisseurs amont dans le temps** : barres empilées des pairs qui voient le préfixe via chaque fournisseur (un basculement de fournisseur se lit comme une barre qui en remplace une autre) |
+| Pays | indicateurs par pays ; la fiche `/countries/:iso2` liste les AS et leurs relations (fournisseurs, clients, peerings), puis les mêmes panneaux **Préfixes** et **Voisins BGP** que la page d'un AS, agrégés sur tous les AS du pays (une colonne indique l'AS concerné ; les historiques s'ouvrent par ligne) |
+
+Les liens « RPKI ROA » et « Route Object » d'un tableau de préfixes ouvrent l'historique daté (origine, trust anchor ou source, longueur maximale, première et dernière observation, concordance avec l'origine observée). L'interface est en français ; seuls restent en anglais les termes que la page définit en infobulle (New, Left, Unstable) et les noms propres (RPKI ROA, Route Object, Trust Anchor, IPv4, IPv6). Les éléments cliquables du graphe de propagation ont un indicateur de focus clavier visible.
+
+---
+
+## Configuration et journaux
+
+Cascade : valeurs par défaut → `configs/*.yaml` → variables d'environnement `ABRIP_*` (délimiteur imbriqué `__`) ; l'environnement l'emporte. Ce qui était figé dans le code se règle sans le modifier :
+
+| Réglage | Où | Exemple de surcharge |
+|---|---|---|
+| Racine d'archive et cadence de publication par projet | `settings.yaml` : `ingestion.archive_root`, `ingestion.cadence` | `ABRIP_INGESTION__ARCHIVE_ROOT='{"routeviews": "https://miroir.example/rv", ...}'` |
+| URL RIS Live, listes anycast | `ingestion.ris_live_url`, `reference.anycast_v4_url` / `anycast_v6_url` | `ABRIP_INGESTION__RIS_LIVE_URL=...` |
+| Tri des partitions `bgp_elements` (requêtes par préfixe 3 à 4 fois plus rapides à 10 M de lignes) | `etl.sort_partitions`, `etl.row_group_size`, `etl.sort_memory_limit` | `ABRIP_ETL__SORT_PARTITIONS=false` |
+| Seuils IODA / RIPE Atlas | `enrichment.ioda_outage_threshold`, `enrichment.atlas_connected_floor` | `ABRIP_ENRICHMENT__IODA_OUTAGE_THRESHOLD=0.8` |
+| Recouvrement MOAS toléré pour l'anycast | `detection.yaml` : `detectors.moas.anycast_overlap_ceiling` | modifier le fichier |
+
+Journal : sur la console, et dans `data/logs/abrip.log` (JSON, une ligne par message, rotation à 10 Mo, 5 sauvegardes ; `ABRIP_LOG_FILE`, `ABRIP_LOG_MAX_BYTES`, `ABRIP_LOG_BACKUP_COUNT`). Un échec réseau journalise le type d'erreur, la méthode, l'URL et le code de statut :
+
+```bash
+jq 'select(.status_code != null) | {ts, message, method, url, status_code}' data/logs/abrip.log
+```
+
+Le jeu de démonstration porte des AS fictifs : `abrip demo bootstrap` n'interroge ni IODA, ni RIPE Atlas, ni Cloudflare Radar.
 
 ---
 
@@ -102,7 +140,7 @@ frontend/                React + Vite + TypeScript + Recharts
 
 **Un parseur MRT derrière une interface unique.** Quatre implémentations possibles (`bgpkit-parser`, `mrtparse`, `pybgpstream`, générateur synthétique) sont classées par ordre de préférence et sélectionnées automatiquement selon ce qui est installé. Le reste du code ne sait pas laquelle est active. C'est ce qui permet au projet de démarrer sur une machine sans dépendance native compilée.
 
-**Recharts pour les graphiques.** Composants React déclaratifs, bien maintenus, et le découpage du bundle isole la bibliothèque dans son propre fragment. Total transféré : 191 Ko compressés, sous le budget de 250 Ko fixé au cahier des charges.
+**Recharts pour les graphiques.** Composants React déclaratifs, bien maintenus, et le découpage du bundle isole la bibliothèque dans son propre fragment. Total transféré : 208 Ko compressés, sous le budget de 250 Ko fixé au cahier des charges.
 
 **Le score z robuste plutôt que l'écart-type.** Le churn BGP est très asymétrique : un seul pic gonfle l'écart-type au point de masquer les pics suivants. La médiane et l'écart absolu médian restent calés sur le bruit de fond.
 
@@ -156,8 +194,8 @@ Les deux derniers sont conservés délibérément : l'écart entre la vue africa
 abrip status                                   # état des données et couverture
 abrip ingest broker --from 2026-08-01 --to 2026-08-07
 abrip reference sync --sources afrinic,rpki,caida,as2org,irr,peeringdb,anycast
-abrip etl curate --from 2026-08-01 --to 2026-08-07
-abrip analytics compute --from 2026-08-01 --to 2026-08-07
+abrip etl curate --from 2026-08-01 --to 2026-08-07   # écrit bgp_elements trié par (prefix, ts)
+abrip analytics compute --from 2026-08-01 --to 2026-08-07   # métriques + tables journalières (réponses rapides par AS)
 abrip detect run --from 2026-08-01 --to 2026-08-07
 abrip detect watch --minutes 5 --iterations 12  # détection continue sur RIS Live (L7)
 abrip pipeline --date 2026-08-01                # tout l'enchaînement pour un jour
@@ -171,14 +209,14 @@ Toute commande supporte `--dry-run` là où elle télécharge ou écrit, et jour
 ## Tests
 
 ```bash
-make test        # 166 tests
+make test        # 706 tests (223 + 483 ignorés sur une installation sans données)
 make lint        # ruff
 make typecheck   # mypy
 ```
 
 Le test qui compte est `test_rappel_sur_verite_terrain` : il exige que toutes les anomalies plantées soient retrouvées. Un réglage de seuil qui « améliore les chiffres » en cassant la détection est arrêté là.
 
-Les tests d'API et de non-régression sont ignorés proprement — et non en échec — si le pipeline n'a pas encore tourné : la suite reste verte sur une installation fraîche.
+Les tests d'API et de non-régression sont ignorés proprement — et non en échec — si le pipeline n'a pas encore tourné : la suite reste verte sur une installation fraîche (`/api/health` y répond `degraded`, pas `ok`).
 
 ---
 
@@ -202,7 +240,7 @@ Rappel sur la vérité terrain après l'ensemble de ces remédiations : toujours
 
 ## Déploiement
 
-La plateforme se déploie gratuitement sans modification : aucune base externe, un seul processus, et 3,4 Mo de données qui tiennent dans l'image.
+La plateforme se déploie gratuitement sans modification : aucune base externe, un seul processus, et 3,5 Mo de données qui tiennent dans l'image.
 
 ```bash
 docker build -t abrip .
@@ -219,8 +257,10 @@ Hugging Face Spaces est l'hébergement gratuit recommandé — 16 Go de mémoire
 - [ADR 0001](docs/adr/0001-strategie-parseur-mrt.md) — stratégie de parsing MRT
 - [ADR 0002](docs/adr/0002-stockage-parquet-duckdb.md) — Parquet + DuckDB plutôt qu'une base
 - [ADR 0003](docs/adr/0003-detection-explicable.md) — détection explicable plutôt qu'apprise
+- [ADR 0004](docs/adr/0004-graphe-propagation-prefixe.md) — graphe de propagation d'un préfixe
 - [Limites et remédiations](docs/limites-et-remediations.md) — ce que la plateforme ne peut pas conclure, et comment y remédier
 - [Guide de déploiement](docs/deploiement.md) — hébergement gratuit, Docker, intégration continue
+- [Performances à grande échelle](docs/performances.md) — mesures de 1 à 50 millions de lignes, ce qui a été optimisé, ce qui ne passe pas encore à l'échelle
 
 ## Sources de données
 

@@ -30,21 +30,16 @@ from datetime import date
 import httpx
 import polars as pl
 
-from abrip.logging_conf import get_logger
+from abrip.logging_conf import get_logger, log_http_error
 from abrip.models import REF_ANYCAST_SCHEMA
 
 log = get_logger(__name__)
 
-ANYCATCH_V4_URL = (
-    "https://raw.githubusercontent.com/bgptools/anycast-prefixes/master/anycatch-v4-prefixes.csv"
-)
-ANYCATCH_V6_URL = (
-    "https://raw.githubusercontent.com/bgptools/anycast-prefixes/master/anycatch-v6-prefixes.csv"
-)
-
-# En dessous de ce taux de recouvrement entre les deux chemins (hors origine),
-# on les considère divergents — signature attendue de sites anycast distincts.
-PATH_OVERLAP_CEILING = 0.5
+# Repli si non fourni par l'appelant (voir configs/detection.yaml,
+# moas.anycast_overlap_ceiling) : en dessous de ce taux de recouvrement entre
+# les deux chemins (hors origine), on les considère divergents — signature
+# attendue de sites anycast distincts.
+DEFAULT_PATH_OVERLAP_CEILING = 0.5
 
 
 def parse_anycatch_csv(text: str) -> set[str]:
@@ -71,6 +66,12 @@ def parse_anycatch_csv(text: str) -> set[str]:
 def fetch_anycast_reference(
     settings_timeout: float = 30.0,
     transport: httpx.BaseTransport | None = None,
+    v4_url: str = (
+        "https://raw.githubusercontent.com/bgptools/anycast-prefixes/master/anycatch-v4-prefixes.csv"
+    ),
+    v6_url: str = (
+        "https://raw.githubusercontent.com/bgptools/anycast-prefixes/master/anycatch-v6-prefixes.csv"
+    ),
 ) -> set[str]:
     """Télécharge les listes IPv4 et IPv6 publiées par bgp.tools.
 
@@ -83,12 +84,12 @@ def fetch_anycast_reference(
     with httpx.Client(
         timeout=settings_timeout, transport=transport, follow_redirects=True
     ) as client:
-        for url in (ANYCATCH_V4_URL, ANYCATCH_V6_URL):
+        for url in (v4_url, v6_url):
             try:
                 response = client.get(url)
                 response.raise_for_status()
             except httpx.HTTPError as exc:
-                log.warning("catalogue anycast indisponible", extra={"url": url, "error": str(exc)})
+                log_http_error(log, "catalogue anycast indisponible", exc, url=url)
                 continue
             prefixes |= parse_anycatch_csv(response.text)
     return prefixes
@@ -143,6 +144,7 @@ def is_anycast_candidate(
     paths_a: list[list[int]] | None,
     paths_b: list[list[int]] | None,
     anycast_prefixes: frozenset[str],
+    overlap_ceiling: float = DEFAULT_PATH_OVERLAP_CEILING,
 ) -> bool:
     """Le MOAS observé ressemble-t-il à de l'anycast légitime plutôt qu'à un détournement ?
 
@@ -150,7 +152,8 @@ def is_anycast_candidate(
     ``paths_a``/``paths_b`` peuvent être vides (chemin non retenu par
     l'agrégation) — dans ce cas, seul le catalogue est consulté, avec une
     exigence renforcée implicite : un opérateur prudent préférera vérifier
-    manuellement plutôt que de se fier au seul catalogue.
+    manuellement plutôt que de se fier au seul catalogue. ``overlap_ceiling``
+    vient de ``configs/detection.yaml`` (``moas.anycast_overlap_ceiling``).
     """
     if not is_known_anycast(prefix, anycast_prefixes):
         return False
@@ -166,4 +169,4 @@ def is_anycast_candidate(
         (_path_overlap(a, b) for a in paths_a for b in paths_b),
         default=1.0,
     )
-    return worst_overlap <= PATH_OVERLAP_CEILING
+    return worst_overlap <= overlap_ceiling

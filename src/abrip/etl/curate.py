@@ -22,7 +22,7 @@ from abrip.ingestion.ris_live import ris_live_to_elements
 from abrip.logging_conf import get_logger
 from abrip.models import BGP_ELEMENTS_SCHEMA, RIB_SNAPSHOT_SCHEMA
 from abrip.storage.catalog import Catalog, RunContext
-from abrip.storage.parquet import ParquetBatchWriter, partition_path, write_frame
+from abrip.storage.parquet import ParquetBatchWriter, partition_path, sort_partition, write_frame
 
 log = get_logger(__name__)
 
@@ -125,6 +125,13 @@ def curate_day(
         totals["elements"] += writer.rows_written
 
         if writer.rows_written:
+            if settings.etl.sort_partitions:
+                sort_partition(
+                    target,
+                    row_group_size=settings.etl.row_group_size,
+                    memory_limit=settings.etl.sort_memory_limit,
+                    compression=settings.etl.compression,
+                )
             size = sum(f.stat().st_size for f in target.glob("*.parquet"))
             catalog.register_partition(
                 "bgp_elements", str(target), writer.rows_written, size, run_id
@@ -234,6 +241,13 @@ def curate_ris_live_window(
             else:
                 merged = group.unique(subset=dedup_keys, keep="last")
             write_frame(merged, target)
+            if settings.etl.sort_partitions:
+                sort_partition(
+                    target,
+                    row_group_size=settings.etl.row_group_size,
+                    memory_limit=settings.etl.sort_memory_limit,
+                    compression=settings.etl.compression,
+                )
             size = sum(f.stat().st_size for f in target.glob("*.parquet"))
             catalog.register_partition(
                 "bgp_elements", str(target), merged.height, size, run_id or run.run_id
@@ -271,3 +285,25 @@ def _date_range(start: date, end: date) -> Iterable[date]:
     while current <= end:
         yield current
         current += timedelta(days=1)
+
+
+def compact_bgp_elements(settings: Settings) -> dict[str, int]:
+    """Trie les partitions ``bgp_elements`` déjà écrites (mise à jour d'une installation).
+
+    Idempotent. Les partitions écrites avant le tri portent ``collector`` en
+    ``Categorical`` : polars refuse de lire ensemble des fichiers aux deux types,
+    la commande les ramène donc toutes au même schéma.
+    """
+    root = settings.curated_dir / "bgp_elements"
+    totals = {"partitions": 0, "rows": 0}
+    for directory in sorted(p for p in root.glob("date=*/collector=*") if p.is_dir()):
+        rows = sort_partition(
+            directory,
+            row_group_size=settings.etl.row_group_size,
+            memory_limit=settings.etl.sort_memory_limit,
+            compression=settings.etl.compression,
+        )
+        if rows:
+            totals["partitions"] += 1
+            totals["rows"] += rows
+    return totals

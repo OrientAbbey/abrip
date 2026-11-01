@@ -1,7 +1,9 @@
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { useApi, useTitle } from "../lib/useApi";
 import type { AsnSummary, CountryRow, Page } from "../lib/types";
+import { AsnLink } from "../components/AsnLink";
 import { AsyncBlock, EmptyState } from "../components/StateBlock";
+import { Term } from "../components/Term";
 import { countryLabel, dec, num } from "../lib/format";
 
 const PAGE_SIZE = 25;
@@ -95,9 +97,9 @@ export default function AsnList() {
                       <th>Pays</th>
                       <th className="num">Préfixes</th>
                       <th className="num">Mises à jour</th>
-                      <th className="num">Fournisseurs</th>
+                      <th className="num"><Term k="upstreams">Fournisseurs</Term></th>
                       <th>Transit principal</th>
-                      <th className="num">HHI</th>
+                      <th className="num"><Term k="hhi">HHI</Term></th>
                       <th className="num">Événements</th>
                     </tr>
                   </thead>
@@ -105,7 +107,7 @@ export default function AsnList() {
                     {page.items.map((a) => (
                       <tr key={a.asn}>
                         <td className="mono">
-                          <Link to={`/asns/${a.asn}`}>AS{a.asn}</Link>
+                          <AsnLink asn={a.asn} className="" />
                         </td>
                         <td>{countryLabel(a.country_iso2)}</td>
                         <td className="num mono">{num(a.prefixes)}</td>

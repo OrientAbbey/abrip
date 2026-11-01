@@ -175,7 +175,7 @@ class Incident(BaseModel):
 # ---------------------------------------------------------------------------
 BGP_ELEMENTS_SCHEMA: dict[str, Any] = {
     "ts": pl.Datetime("us"),
-    "collector": pl.Categorical,
+    "collector": pl.String,
     "peer_asn": pl.UInt32,
     "peer_ip": pl.Utf8,
     "elem_type": pl.Utf8,
@@ -196,7 +196,7 @@ BGP_ELEMENTS_SCHEMA: dict[str, Any] = {
 
 RIB_SNAPSHOT_SCHEMA: dict[str, Any] = {
     "snapshot_ts": pl.Datetime("us"),
-    "collector": pl.Categorical,
+    "collector": pl.String,
     "peer_asn": pl.UInt32,
     "prefix": pl.Utf8,
     "prefix_ip_version": pl.UInt8,
@@ -290,9 +290,12 @@ REF_ANYCAST_SCHEMA: dict[str, Any] = {
 }
 
 # CAIDA AS2Org — nécessaire pour que le filtre « même organisation » du
-# détecteur MOAS (L6) ait des données à consulter.
+# détecteur MOAS (L6) ait des données à consulter. `asn_name` (le nom court
+# déclaré, ex. "COGENT-174") sert à l'affichage à côté du numéro d'AS partout
+# dans l'interface ; `org_name` est le nom complet de l'organisation.
 REF_AS_ORG_SCHEMA: dict[str, Any] = {
     "asn": pl.UInt32,
+    "asn_name": pl.Utf8,
     "org_id": pl.Utf8,
     "org_name": pl.Utf8,
     "snapshot_date": pl.Utf8,

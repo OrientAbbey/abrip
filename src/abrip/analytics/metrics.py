@@ -498,6 +498,11 @@ def compute_all(
             settings, catalog, "metric_rpki_coverage", rpki_coverage, run.run_id
         )
 
+        # Tables journalières qui évitent de relire bgp_elements (docs/performances.md).
+        from abrip.analytics.daily import compute_daily_summaries
+
+        written.update(compute_daily_summaries(settings, catalog, start, end, run.run_id))
+
         run.rows_out = sum(written.values())
 
     log.info("indicateurs calculés", extra=written)

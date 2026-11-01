@@ -29,7 +29,7 @@ from typing import Any
 
 import httpx
 
-from abrip.logging_conf import get_logger
+from abrip.logging_conf import get_logger, log_http_error
 from abrip.models import DataplaneVerdict, Event
 
 log = get_logger(__name__)
@@ -82,7 +82,7 @@ class IodaClient:
             )
             response.raise_for_status()
         except httpx.HTTPError as exc:
-            log.warning("requête IODA en échec", extra={"entity": entity_code, "error": str(exc)})
+            log_http_error(log, "requête IODA en échec", exc, entity=entity_code)
             return []
         try:
             payload = response.json()
@@ -153,7 +153,7 @@ class RipeAtlasClient:
             response = self._client.get("/probes/", params={**params, "page_size": 1})
             response.raise_for_status()
         except httpx.HTTPError as exc:
-            log.warning("requête RIPE Atlas en échec", extra={"params": params, "error": str(exc)})
+            log_http_error(log, "requête RIPE Atlas en échec", exc, params=params)
             return None
         try:
             return int(response.json().get("count", 0))
@@ -244,7 +244,7 @@ class CloudflareRadarClient:
             response = self._client.get("/radar/annotations/outages", params=params)
             response.raise_for_status()
         except httpx.HTTPError as exc:
-            log.warning("requête Cloudflare Radar en échec", extra={"error": str(exc)})
+            log_http_error(log, "requête Cloudflare Radar en échec", exc)
             return []
         try:
             payload = response.json()
@@ -344,6 +344,8 @@ def enrich_events(
     atlas: RipeAtlasClient,
     radar: CloudflareRadarClient | None = None,
     min_severity: str = "watch",
+    outage_threshold: float = IODA_OUTAGE_THRESHOLD,
+    connected_floor: float = ATLAS_CONNECTED_FLOOR,
 ) -> list[Event]:
     """Confirme chaque événement éligible et rétrograde les faux positifs probables.
 
@@ -361,7 +363,7 @@ def enrich_events(
         if order[event.severity] < floor:
             enriched.append(event)
             continue
-        report = confirm_event(event, ioda, atlas, radar)
+        report = confirm_event(event, ioda, atlas, radar, outage_threshold, connected_floor)
         updated = event.model_copy(
             update={"dataplane_verdict": report.verdict, "dataplane_evidence": report.evidence}
         )

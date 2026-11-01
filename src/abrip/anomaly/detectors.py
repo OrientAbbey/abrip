@@ -154,7 +154,11 @@ class MoasDetector(Detector):
             self.config.get("ignore_known_anycast", True)
             and context.anycast_prefixes
             and is_anycast_candidate(
-                prefix, incumbent.get("paths"), challenger.get("paths"), context.anycast_prefixes
+                prefix,
+                incumbent.get("paths"),
+                challenger.get("paths"),
+                context.anycast_prefixes,
+                float(self.config.get("anycast_overlap_ceiling", 0.5)),
             )
         )
 

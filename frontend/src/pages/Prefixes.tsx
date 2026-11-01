@@ -1,8 +1,14 @@
+import { useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useApi, useTitle } from "../lib/useApi";
+import { defaultRange, useDataBounds } from "../lib/useDataBounds";
 import type { Page, PrefixSummary, Series } from "../lib/types";
+import { AsnLink } from "../components/AsnLink";
+import { DateRangeSelector, rangeParams, type DateRange } from "../components/DateRangeSelector";
 import { AsyncBlock, EmptyState } from "../components/StateBlock";
 import { SeverityBadge } from "../components/Badges";
+import { PropagationGraph } from "../components/PropagationGraph";
+import { UpstreamChart } from "../components/UpstreamChart";
 import { PALETTE, TimeChart } from "../components/TimeChart";
 import { countryLabel, detectorLabel, dt, num, pct } from "../lib/format";
 
@@ -81,7 +87,7 @@ export function PrefixList() {
                           <Link to={`/prefixes/${encodeURIComponent(p.prefix)}`}>{p.prefix}</Link>
                         </td>
                         <td className="mono">
-                          {p.origin_asn ? <Link to={`/asns/${p.origin_asn}`}>AS{p.origin_asn}</Link> : "—"}
+                          {p.origin_asn ? <AsnLink asn={p.origin_asn} /> : "—"}
                         </td>
                         <td>{countryLabel(p.country_iso2)}</td>
                         <td className="num mono">{pct(p.visibility_ratio)}</td>
@@ -155,7 +161,13 @@ export function PrefixDetail() {
   const prefix = splat ?? "";
   useTitle(prefix || "Préfixe");
   const detail = useApi<PrefixDetailData>(prefix ? `/prefixes/${prefix}` : null);
-  const churn = useApi<Series>("/metrics/churn", { prefix });
+  const bounds = useDataBounds();
+  const [range, setRange] = useState<DateRange>({ from: "", to: "" });
+  const effectiveRange = range.from ? range : defaultRange(bounds);
+  const churn = useApi<Series>("/metrics/churn", { prefix, ...rangeParams(effectiveRange) });
+  // `/prefixes/{prefix}` renvoie tout l'historique : la plage est appliquée ici.
+  const inRange = (ts: string) =>
+    !effectiveRange.from || (ts.slice(0, 10) >= effectiveRange.from && ts.slice(0, 10) <= effectiveRange.to);
 
   return (
     <div className="stack">
@@ -165,7 +177,7 @@ export function PrefixDetail() {
 
       <AsyncBlock state={detail} rows={5}>
         {(data) => {
-          const visPoints = data.visibility.map((v) => ({
+          const visPoints = data.visibility.filter((v) => inRange(v.snapshot_ts)).map((v) => ({
             ts: v.snapshot_ts,
             values: { visibility_ratio: v.visibility_ratio, peers_seeing: v.peers_seeing },
           }));
@@ -183,6 +195,9 @@ export function PrefixDetail() {
                   )}
                 </div>
               </div>
+
+              <PropagationGraph prefix={data.prefix} origins={data.origins} range={effectiveRange} />
+              <UpstreamChart prefix={data.prefix} range={effectiveRange} />
 
               <div className="grid cols-2">
                 <section className="card">
@@ -202,7 +217,7 @@ export function PrefixDetail() {
                         {data.origins.map((o) => (
                           <tr key={o.origin_asn}>
                             <td className="mono">
-                              <Link to={`/asns/${o.origin_asn}`}>AS{o.origin_asn}</Link>
+                              <AsnLink asn={o.origin_asn} />
                             </td>
                             <td className="num mono">{num(o.announcements)}</td>
                             <td className="num mono">{num(o.peers)}</td>
@@ -245,7 +260,7 @@ export function PrefixDetail() {
                           {data.roa.map((r, i) => (
                             <tr key={i}>
                               <td className="mono">{r.prefix}</td>
-                              <td className="mono">AS{r.asn}</td>
+                              <td className="mono"><AsnLink asn={r.asn} /></td>
                               <td className="num mono">/{r.max_len}</td>
                               <td>{r.ta}</td>
                             </tr>
@@ -256,6 +271,14 @@ export function PrefixDetail() {
                   )}
                 </section>
               </div>
+
+              <section className="card">
+                <div className="row" style={{ justifyContent: "space-between" }}>
+                  <h2>Période analysée</h2>
+                  <DateRangeSelector bounds={bounds} value={effectiveRange} onChange={setRange} />
+                </div>
+                <p className="card-note">S'applique au graphe de propagation (mode « Instantané »), à la visibilité et à l'activité ; le mode « Rejouer » a sa propre tranche horaire.</p>
+              </section>
 
               <section className="card">
                 <h2>Visibilité</h2>

@@ -47,7 +47,7 @@ def parse_as2org(path: Path, snapshot_date: date | None = None) -> pl.DataFrame:
     """
     stamp = (snapshot_date or date.today()).isoformat()
     org_names: dict[str, str] = {}
-    asn_org: list[tuple[int, str]] = []
+    asn_org: list[tuple[int, str, str]] = []
     mode = "aut"
 
     with _opener(path)(path, "rt", encoding="utf-8", errors="replace") as handle:
@@ -70,8 +70,9 @@ def parse_as2org(path: Path, snapshot_date: date | None = None) -> pl.DataFrame:
                     asn = int(parts[0])
                 except ValueError:
                     continue
-                org_id = parts[3] or parts[2]
-                asn_org.append((asn, org_id))
+                aut_name = parts[2]
+                org_id = parts[3] or aut_name
+                asn_org.append((asn, aut_name, org_id))
             elif mode == "org" and len(parts) >= 3:
                 org_id, _changed, org_name = parts[0], parts[1], parts[2]
                 org_names[org_id] = org_name
@@ -85,8 +86,9 @@ def parse_as2org(path: Path, snapshot_date: date | None = None) -> pl.DataFrame:
     frame = (
         pl.DataFrame(
             {
-                "asn": [a for a, _ in asn_org],
-                "org_id": [o for _, o in asn_org],
+                "asn": [a for a, _, _ in asn_org],
+                "asn_name": [n for _, n, _ in asn_org],
+                "org_id": [o for _, _, o in asn_org],
             }
         )
         .with_columns(

@@ -82,6 +82,7 @@ def write_frame(
     filename: str = "part-00000.parquet",
     compression: str = "zstd",
     replace: bool = True,
+    row_group_size: int | None = None,
 ) -> Path:
     """Écrit une partition de façon atomique : écriture temporaire puis renommage.
 
@@ -93,7 +94,9 @@ def write_frame(
         for stale in directory.glob("*.parquet"):
             stale.unlink()
     tmp = directory / f".{filename}.tmp"
-    frame.write_parquet(tmp, compression=cast(Any, compression), statistics=True)
+    frame.write_parquet(
+        tmp, compression=cast(Any, compression), statistics=True, row_group_size=row_group_size
+    )
     final = directory / filename
     tmp.replace(final)
     return final
@@ -172,3 +175,63 @@ def drop_partition(root: Path, table: str, date: str, collector: str | None = No
     path = partition_path(root, table, date=date, collector=collector)
     if path.exists():
         shutil.rmtree(path)
+
+
+def sort_partition(
+    directory: Path,
+    by: tuple[str, ...] = ("prefix", "ts"),
+    *,
+    row_group_size: int = 100_000,
+    memory_limit: str = "1GB",
+    compression: str = "zstd",
+) -> int:
+    """Réécrit une partition en un seul fichier trié, et renvoie son nombre de lignes.
+
+    Pourquoi : les requêtes de l'API filtrent presque toujours par préfixe. Avec
+    des lignes dans l'ordre d'arrivée, chaque groupe de lignes Parquet contient
+    un peu de tous les préfixes et aucun ne peut être écarté ; triées, chacun
+    ne couvre qu'une plage étroite et DuckDB saute les autres grâce aux
+    statistiques min/max.
+
+    Le tri passe par DuckDB et non par polars : il déborde sur disque au-delà de
+    ``memory_limit`` (un portable à 4 Go doit pouvoir trier une journée d'un gros
+    collecteur), là où le tri en mémoire de polars coûte environ 200 octets par
+    ligne. Contrepartie : DuckDB n'écrit pas de ``Categorical``, d'où le texte
+    pour ``collector`` dans ``BGP_ELEMENTS_SCHEMA``.
+
+    Atomique et idempotent : écriture temporaire, puis remplacement des anciens
+    fragments par ``part-00000.parquet``.
+    """
+    import duckdb
+
+    fragments = sorted(directory.glob("*.parquet"))
+    if not fragments:
+        return 0
+    spill = directory / ".sort-tmp"
+    spill.mkdir(exist_ok=True)
+    tmp = directory / ".part-00000.sorted.tmp"
+    con = duckdb.connect()
+    try:
+        con.execute("SET memory_limit = ?", [memory_limit])
+        con.execute("SET temp_directory = ?", [str(spill)])
+        con.execute("SET threads = 1")  # un portable n'a pas de cœurs à perdre ; moins de mémoire
+        order = ", ".join(f'"{column}"' for column in by)
+        source = ", ".join(f"'{f.as_posix()}'" for f in fragments)
+        con.execute(
+            f"COPY (SELECT * FROM read_parquet([{source}], union_by_name = true) ORDER BY {order}) "
+            f"TO '{tmp.as_posix()}' (FORMAT PARQUET, COMPRESSION {compression.upper()}, "
+            f"ROW_GROUP_SIZE {int(row_group_size)})"
+        )
+        rows = int(
+            con.execute(f"SELECT count(*) FROM read_parquet('{tmp.as_posix()}')").fetchone()[0]  # type: ignore[index]
+        )
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        raise
+    finally:
+        con.close()
+        shutil.rmtree(spill, ignore_errors=True)
+    for fragment in fragments:
+        fragment.unlink()
+    tmp.replace(directory / "part-00000.parquet")
+    return rows

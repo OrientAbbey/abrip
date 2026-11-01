@@ -15,7 +15,7 @@ from typing import Any
 import httpx
 
 from abrip.config import Settings
-from abrip.logging_conf import get_logger
+from abrip.logging_conf import get_logger, log_http_error
 from abrip.reference.anycast import build_anycast_reference, fetch_anycast_reference
 from abrip.reference.as2org import parse_as2org
 from abrip.reference.irr import RipeDbClient, build_irr_reference
@@ -53,7 +53,7 @@ def sync_rir(settings: Settings, snapshot: date) -> int:
         try:
             files[rir] = _download(url, staging / f"delegated-{rir}.txt", settings)
         except Exception as exc:
-            log.warning("source RIR indisponible", extra={"rir": rir, "error": str(exc)})
+            log_http_error(log, "source RIR indisponible", exc, rir=rir, url=url)
 
     if not files:
         return 0
@@ -71,7 +71,7 @@ def sync_rpki(settings: Settings, snapshot: date) -> int:
     try:
         _download(url, staging, settings)
     except Exception as exc:
-        log.warning("export RPKI indisponible", extra={"error": str(exc)})
+        log_http_error(log, "export RPKI indisponible", exc, url=url)
         return 0
 
     with staging.open(encoding="utf-8") as handle:
@@ -96,7 +96,7 @@ def sync_caida(settings: Settings, snapshot: date, filename: str | None = None) 
         try:
             candidates = [_download(url, local / filename, settings)]
         except Exception as exc:
-            log.warning("fichier CAIDA indisponible", extra={"error": str(exc)})
+            log_http_error(log, "fichier CAIDA indisponible", exc, url=url)
 
     if not candidates:
         log.warning(
@@ -227,7 +227,11 @@ def sync_anycast(settings: Settings, snapshot: date) -> int:
     synchronisation globale : le filtre anycast se contente alors de rester
     inactif, comme documenté dans ``docs/limites-et-remediations.md``.
     """
-    prefixes = fetch_anycast_reference(settings.enrichment.request_timeout)
+    prefixes = fetch_anycast_reference(
+        settings.enrichment.request_timeout,
+        v4_url=settings.reference.anycast_v4_url,
+        v6_url=settings.reference.anycast_v6_url,
+    )
     if not prefixes:
         log.warning("catalogue anycast vide ou indisponible")
         return 0

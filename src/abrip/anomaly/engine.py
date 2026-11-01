@@ -26,7 +26,7 @@ from abrip.anomaly.detectors import (
     VisibilityDropDetector,
 )
 from abrip.config import Settings
-from abrip.logging_conf import get_logger
+from abrip.logging_conf import get_logger, log_http_error
 from abrip.models import EVENTS_SCHEMA, Event, Incident
 from abrip.reference.irr import IrrValidator
 from abrip.reference.relationships import RelationshipIndex
@@ -279,9 +279,17 @@ def _enrich_dataplane(settings: Settings, events: list[Event]) -> list[Event]:
                 cfg.cloudflare_radar_token, cfg.cloudflare_radar_base_url, cfg.request_timeout
             ) as radar,
         ):
-            return enrich_events(events, ioda, atlas, radar, cfg.dataplane_min_severity)
+            return enrich_events(
+                events,
+                ioda,
+                atlas,
+                radar,
+                cfg.dataplane_min_severity,
+                cfg.ioda_outage_threshold,
+                cfg.atlas_connected_floor,
+            )
     except Exception as exc:
-        log.warning("enrichissement plan de données indisponible", extra={"error": str(exc)})
+        log_http_error(log, "enrichissement plan de données indisponible", exc)
         return events
 
 

@@ -15,10 +15,22 @@ import polars as pl
 from abrip.analytics.metrics import compute_all
 from abrip.anomaly.engine import run_detection
 from abrip.config import Settings
-from abrip.demo.generator import BASE_DATE, DEFAULT_DAYS, ground_truth, reference_frames
+from abrip.demo.generator import (
+    BASE_DATE,
+    DEFAULT_DAYS,
+    ground_truth,
+    historical_reference_snapshots,
+    reference_frames,
+)
 from abrip.etl.curate import curate_range
 from abrip.logging_conf import get_logger
-from abrip.models import REF_AS_ORG_SCHEMA, REF_AS_REL_SCHEMA, REF_ASN_SCHEMA, REF_ROA_SCHEMA
+from abrip.models import (
+    REF_AS_ORG_SCHEMA,
+    REF_AS_REL_SCHEMA,
+    REF_ASN_SCHEMA,
+    REF_IRR_ROUTE_SCHEMA,
+    REF_ROA_SCHEMA,
+)
 from abrip.storage.catalog import Catalog
 from abrip.storage.parquet import write_frame
 
@@ -41,6 +53,20 @@ def write_reference(settings: Settings) -> dict[str, int]:
     return written
 
 
+def write_history(settings: Settings) -> dict[str, int]:
+    """Écrit les instantanés ROA/Route Object datés (voir
+    ``demo.generator.historical_reference_snapshots``) — donne aux modales
+    d'historique du préfixe autre chose qu'une ligne unique."""
+    written: dict[str, int] = {}
+    for path, rows in historical_reference_snapshots().items():
+        table = path.split("/")[1] if path.startswith("history/") else path
+        schema = REF_ROA_SCHEMA if table == "ref_roa" else REF_IRR_ROUTE_SCHEMA
+        frame = pl.DataFrame(rows, schema=schema, strict=False)
+        write_frame(frame, settings.reference_dir / path)
+        written[path] = frame.height
+    return written
+
+
 def bootstrap(settings: Settings, days: int = DEFAULT_DAYS) -> dict[str, object]:
     settings.ensure_dirs()
     catalog = Catalog(settings.catalog_path)
@@ -49,6 +75,7 @@ def bootstrap(settings: Settings, days: int = DEFAULT_DAYS) -> dict[str, object]
     end = start + timedelta(days=days - 1)
 
     reference = write_reference(settings)
+    reference.update(write_history(settings))
     log.info("référentiels de démonstration écrits", extra=reference)
 
     curated = curate_range(
@@ -60,7 +87,18 @@ def bootstrap(settings: Settings, days: int = DEFAULT_DAYS) -> dict[str, object]
         synthetic=True,
     )
     metrics = compute_all(settings, catalog, start, end)
-    detection = run_detection(settings, catalog, start, end)
+
+    # Le jeu de démonstration porte des ASN et des incidents fictifs :
+    # interroger IODA/RIPE Atlas/Cloudflare Radar à leur sujet n'a jamais de
+    # sens, que le réseau soit joignable ou non — on désactive donc cette
+    # confirmation pour ce run précis, sans changer le réglage par défaut
+    # (activé) utilisé par `abrip detect run` sur de vraies données.
+    dataplane_was_enabled = settings.enrichment.dataplane_enabled
+    settings.enrichment.dataplane_enabled = False
+    try:
+        detection = run_detection(settings, catalog, start, end)
+    finally:
+        settings.enrichment.dataplane_enabled = dataplane_was_enabled
 
     truth = ground_truth()
     _write_ground_truth(settings, truth)

@@ -37,6 +37,8 @@ TABLES: dict[str, tuple[str, str]] = {
     "metric_country": ("analytics", "metric_country/*.parquet"),
     "metric_coverage": ("analytics", "metric_coverage/*.parquet"),
     "metric_rpki_coverage": ("analytics", "metric_rpki_coverage/*.parquet"),
+    "daily_prefix_origin": ("analytics", "daily_prefix_origin/**/*.parquet"),
+    "daily_adjacency": ("analytics", "daily_adjacency/**/*.parquet"),
     "ref_asn": ("reference", "ref_asn/*.parquet"),
     "ref_roa": ("reference", "ref_roa/*.parquet"),
     "ref_as_rel": ("reference", "ref_as_rel/*.parquet"),

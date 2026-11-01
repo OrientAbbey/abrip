@@ -61,6 +61,9 @@ a { color: var(--ink-700); text-decoration-color: var(--ink-300); text-underline
 a:hover { color: var(--crimson); }
 
 code, .mono { font-family: var(--font-mono); font-size: 0.86em; font-variant-numeric: tabular-nums; }
+/* `.mono` (spécificité de classe) écrasait la taille de `h1` : un titre en
+   chasse fixe — numéro d'AS, préfixe — se retrouvait plus petit qu'un h2. */
+h1.mono { font-size: 1.45rem; }
 
 /* --- structure ---------------------------------------------------------- */
 .shell { display: flex; flex-direction: column; min-height: 100%; }
@@ -209,3 +212,55 @@ button.primary:hover:not(:disabled) { background: var(--ink-700); }
   position: absolute; width: 1px; height: 1px; overflow: hidden;
   clip: rect(0 0 0 0); white-space: nowrap;
 }
+
+/* --- onglets ------------------------------------------------------------ */
+.tabs { display: flex; gap: 0.2rem; flex-wrap: wrap; margin: 0.5rem 0; border-bottom: 1px solid var(--rule); }
+.tab {
+  border: 1px solid transparent; border-bottom: none; border-radius: var(--radius) var(--radius) 0 0;
+  background: transparent; color: var(--ink-500); padding: 0.35rem 0.8rem; margin-bottom: -1px;
+}
+.tab:hover:not(:disabled) { background: var(--paper-sunk); }
+.tab.active { background: var(--paper-raised); border-color: var(--rule); color: var(--ink-900); font-weight: 600; }
+.tab-count { margin-left: 0.4rem; font-size: 0.75rem; color: var(--ink-400); font-variant-numeric: tabular-nums; }
+
+/* --- modale ------------------------------------------------------------- */
+.modal-backdrop {
+  position: fixed; inset: 0; z-index: 50; background: rgba(11, 27, 43, 0.5);
+  display: flex; align-items: flex-start; justify-content: center; padding: 8vh 1rem 1rem; overflow-y: auto;
+}
+.modal {
+  background: var(--paper-raised); border: 1px solid var(--rule); border-radius: var(--radius);
+  box-shadow: 0 8px 32px rgba(11, 27, 43, 0.25); padding: 1.1rem 1.2rem;
+  width: 100%; max-width: 820px; outline: none;
+}
+
+/* --- petits éléments ---------------------------------------------------- */
+.link-button {
+  border: none; background: none; padding: 0; color: var(--ink-700); cursor: pointer;
+  text-decoration: underline; text-decoration-color: var(--ink-300); text-underline-offset: 2px;
+}
+.link-button:hover { color: var(--crimson); }
+.badge.status-new { color: var(--teal); background: var(--teal-soft); }
+.badge.status-left { color: var(--crimson); background: var(--crimson-soft); }
+.badge.status-unstable { color: var(--amber); background: var(--amber-soft); }
+.dot { display: inline-block; width: 0.6rem; height: 0.6rem; border-radius: 50%; margin-right: 0.35rem; }
+.dot.on { background: var(--teal); }
+.dot.off { background: var(--paper-sunk); border: 1px solid var(--ink-300); }
+
+/* frise d'historique : un carré par jour, plein si la relation était active */
+.history { display: inline-flex; gap: 2px; vertical-align: middle; }
+.history i { width: 9px; height: 14px; border-radius: 1px; background: var(--paper-sunk); border: 1px solid var(--rule); }
+.history i.on { background: var(--teal); border-color: var(--teal); }
+
+/* terme expliqué : pointillé + curseur d'aide, l'explication est dans `title` */
+.term { border-bottom: 1px dotted var(--ink-400); cursor: help; }
+.glossary { display: grid; grid-template-columns: max-content 1fr; gap: 0.35rem 1rem; font-size: 0.86rem; }
+.glossary dt { font-weight: 600; color: var(--ink-700); }
+.glossary dd { margin: 0; color: var(--ink-500); }
+abbr.term { text-decoration: none; }
+
+/* Éléments SVG focusables du graphe (nœuds, repères d'événements) : le contour du
+   navigateur n'est pas fiable sur un <g> ; on dessine le focus clavier nous-mêmes. */
+.graph-node { outline: none; }
+.graph-node:focus-visible > rect { stroke: var(--crimson); stroke-width: 3.2; }
+.graph-node:focus-visible > polygon { stroke: var(--crimson); stroke-width: 1.6; }

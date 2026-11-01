@@ -2,6 +2,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { useApi, useTitle } from "../lib/useApi";
 import type { EventOut, Facets, Page } from "../lib/types";
 import { AsyncBlock, EmptyState } from "../components/StateBlock";
+import { AsnLink } from "../components/AsnLink";
 import { ScoreBar, SeverityBadge } from "../components/Badges";
 import { countryLabel, detectorLabel, dt, num } from "../lib/format";
 
@@ -142,9 +143,9 @@ export default function Events() {
                         </td>
                         <td className="mono">
                           {e.asns_involved.slice(0, 3).map((asn) => (
-                            <Link key={asn} to={`/asns/${asn}`} style={{ marginRight: "0.4rem" }}>
-                              {asn}
-                            </Link>
+                            <span key={asn} style={{ marginRight: "0.6rem" }}>
+                              <AsnLink asn={asn} />
+                            </span>
                           ))}
                           {e.asns_involved.length > 3 && (
                             <span className="muted">+{e.asns_involved.length - 3}</span>

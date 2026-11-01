@@ -165,3 +165,108 @@ export interface Facets {
   country_iso2: Record<string, number>;
   confidence: Record<string, number>;
 }
+
+// --- explorateurs d'un AS ---------------------------------------------------
+export type PrefixStatus = "stable" | "new" | "left" | "unstable";
+export type NeighbourType = "provider" | "customer" | "peer" | "unspecified";
+
+export interface PrefixRow {
+  prefix: string;
+  /** Page pays : l'AS du pays qui annonce le préfixe. */
+  origin_asn?: number;
+  ip_version: 4 | 6;
+  active: boolean;
+  status: PrefixStatus;
+  first_seen: string;
+  last_seen: string;
+  days_active: number;
+  days_total: number;
+  rpki_status: "valid" | "invalid" | "not-found";
+  irr_status: "irr_consistent" | "irr_inconsistent" | "irr_absent";
+}
+
+export interface HistoryRow {
+  prefix: string;
+  origin: number;
+  trust_anchor?: string;
+  max_length?: number;
+  source?: string;
+  first_seen: string | null;
+  last_seen: string | null;
+  match: boolean;
+}
+
+export interface HistoryResponse {
+  prefix: string;
+  specified_asn: number;
+  rows: HistoryRow[];
+}
+
+export interface NeighbourRow {
+  asn: number;
+  /** Page pays : l'AS du pays dont `asn` est voisin. */
+  member_asn?: number;
+  /** Évolution sur la plage, d'après les jours de présence (même règle que les préfixes). */
+  status?: PrefixStatus;
+  type: NeighbourType;
+  country_iso2: string | null;
+  ipv4: boolean;
+  ipv6: boolean;
+  first_seen: string;
+  last_seen: string;
+  active_now: boolean;
+  history: string[];
+}
+
+export interface NeighboursResponse {
+  asn: number;
+  days: string[];
+  counts: Record<NeighbourType, number>;
+  status_counts?: Record<PrefixStatus, number>;
+  items: NeighbourRow[];
+}
+
+export interface CountryRelation {
+  asn: number;
+  country_iso2: string | null;
+  local_asns: number[];
+}
+
+export interface CountryRelationships {
+  country_iso2: string;
+  asns: number[];
+  providers: CountryRelation[];
+  customers: CountryRelation[];
+  peers: CountryRelation[];
+}
+
+/** Période continue de présence (jours de collecte consécutifs). */
+export interface PeriodRun {
+  first_seen: string;
+  last_seen: string;
+  days: number;
+  /** Messages BGP de la période (historique d'un préfixe) ; absent pour une relation. */
+  observations?: number;
+  /** La période atteint le dernier jour de la plage. */
+  active: boolean;
+}
+
+export interface PrefixAnnouncementHistory {
+  asn: number;
+  prefix: string;
+  start: string | null;
+  end: string | null;
+  items: PeriodRun[];
+  daily: Array<{ day: string; observations: number }>;
+}
+
+export interface NeighbourHistory {
+  asn: number;
+  neighbour: number;
+  type: NeighbourType;
+  start: string | null;
+  end: string | null;
+  ipv4: PeriodRun[];
+  ipv6: PeriodRun[];
+  daily: Array<{ day: string; ipv4: boolean; ipv6: boolean }>;
+}

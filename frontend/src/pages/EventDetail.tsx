@@ -1,6 +1,10 @@
+import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useApi, useTitle } from "../lib/useApi";
+import { useDataBounds } from "../lib/useDataBounds";
 import type { EventTimeline } from "../lib/types";
+import { AsnLink } from "../components/AsnLink";
+import { DateRangeSelector, type DateRange } from "../components/DateRangeSelector";
 import { AsyncBlock } from "../components/StateBlock";
 import { ConfidenceBadge, DataplaneVerdictBadge, ScoreBar, SeverityBadge } from "../components/Badges";
 import { PALETTE, TimeChart } from "../components/TimeChart";
@@ -90,10 +94,27 @@ const DATAPLANE_LABEL: Record<string, string> = {
   radar_asn_outage: "Coupure signalée par AS (Cloudflare Radar)",
 };
 
+/** Lien vers le rejeu de propagation centré sur l'événement : de 2 h avant sa
+ *  première observation à 2 h après la dernière (le rejeu est limité à 7 jours). */
+function propagationLink(prefix: string, firstSeen: string, lastSeen: string): string {
+  const utc = (ts: string) => Date.parse(ts.endsWith("Z") || ts.includes("+") ? ts : `${ts}Z`);
+  const local = (ms: number) => new Date(ms).toISOString().slice(0, 16);
+  const hour = 3600 * 1000;
+  const query = new URLSearchParams({
+    g_mode: "replay",
+    g_from: local(utc(firstSeen) - 2 * hour),
+    g_to: local(utc(lastSeen) + 2 * hour),
+    g_step: "15",
+  });
+  return `/prefixes/${encodeURIComponent(prefix)}?${query}`;
+}
+
 export default function EventDetail() {
   const { eventId = "" } = useParams();
   useTitle("Événement");
   const state = useApi<EventTimeline>(`/events/${encodeURIComponent(eventId)}/timeline`);
+  const bounds = useDataBounds();
+  const [range, setRange] = useState<DateRange | null>(null);
 
   return (
     <div className="stack">
@@ -107,14 +128,24 @@ export default function EventDetail() {
           if (event.last_seen !== event.first_seen) {
             markers.push({ ts: event.last_seen, label: "fin" });
           }
-          const churnPoints = churn.map((row) => ({
+          // Par défaut, la fenêtre de l'événement ± 3 jours : une plage « 7 derniers
+          // jours » pourrait ne montrer aucune donnée pour un événement ancien.
+          const around = (iso: string, days: number) =>
+            new Date(Date.parse(iso) + days * 86_400_000).toISOString().slice(0, 10);
+          const effective: DateRange = range ?? {
+            from: around(event.first_seen, -3),
+            to: around(event.last_seen, 3),
+          };
+          const inRange = (ts: string) => ts.slice(0, 10) >= effective.from && ts.slice(0, 10) <= effective.to;
+          const hasSeries = churn.length > 0 || visibility.length > 0;
+          const churnPoints = churn.filter((row) => inRange(row.ts)).map((row) => ({
             ts: row.ts,
             values: {
               announcements: row.announcements,
               withdrawals: row.withdrawals,
             },
           }));
-          const visibilityPoints = visibility.map((row) => ({
+          const visibilityPoints = visibility.filter((row) => inRange(row.ts)).map((row) => ({
             ts: row.ts,
             values: {
               visibility_ratio: row.visibility_ratio,
@@ -136,6 +167,11 @@ export default function EventDetail() {
                       {event.prefix}
                     </Link>
                   )}
+                  {event.prefix && (
+                    <Link to={propagationLink(event.prefix, event.first_seen, event.last_seen)}>
+                      Voir la propagation autour de l'événement
+                    </Link>
+                  )}
                 </div>
               </div>
 
@@ -153,9 +189,9 @@ export default function EventDetail() {
                       <span className="muted">—</span>
                     ) : (
                       event.asns_involved.map((asn) => (
-                        <Link key={asn} className="tag mono" to={`/asns/${asn}`}>
-                          AS{asn}
-                        </Link>
+                        <span key={asn} className="tag mono" style={{ display: "inline-block" }}>
+                          <AsnLink asn={asn} className="" />
+                        </span>
                       ))
                     )}
                   </dd>
@@ -280,6 +316,18 @@ export default function EventDetail() {
                   <p className="card-note">
                     Plusieurs détecteurs indépendants pointant le même préfixe dans la même fenêtre
                     renforcent le diagnostic : c'est ce qui distingue un incident d'un signal isolé.
+                  </p>
+                </section>
+              )}
+
+              {hasSeries && (
+                <section className="card">
+                  <div className="row" style={{ justifyContent: "space-between" }}>
+                    <h2>Période affichée</h2>
+                    <DateRangeSelector bounds={bounds} value={effective} onChange={setRange} />
+                  </div>
+                  <p className="card-note">
+                    Par défaut, la fenêtre de l'événement et trois jours de part et d'autre.
                   </p>
                 </section>
               )}

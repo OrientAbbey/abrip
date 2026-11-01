@@ -1,10 +1,19 @@
-import { Link, useParams } from "react-router-dom";
+import { useState } from "react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useApi, useTitle } from "../lib/useApi";
+import { useAsnName } from "../lib/useAsnNames";
+import { defaultRange, useDataBounds } from "../lib/useDataBounds";
 import type { Series } from "../lib/types";
+import { AsnLink } from "../components/AsnLink";
+import { DateRangeSelector, rangeParams, type DateRange } from "../components/DateRangeSelector";
+import { NeighbourExplorer } from "../components/NeighbourExplorer";
+import { PrefixExplorer } from "../components/PrefixExplorer";
 import { AsyncBlock } from "../components/StateBlock";
+import { Tabs, type TabOption } from "../components/Tabs";
+import { Term } from "../components/Term";
 import { SeverityBadge } from "../components/Badges";
 import { PALETTE, TimeChart } from "../components/TimeChart";
-import { countryLabel, day, dec, detectorLabel, dt, num } from "../lib/format";
+import { countryLabel, dec, detectorLabel, dt, num } from "../lib/format";
 
 interface AsnDetailData {
   asn: number;
@@ -33,12 +42,44 @@ interface AsnDetailData {
   }>;
 }
 
+type View = "prefixes" | "neighbours" | "transit" | "activity" | "events";
+const VIEWS: View[] = ["prefixes", "neighbours", "transit", "activity", "events"];
+
+/** Sections de la page, une à la fois : la page d'un AS réunit cinq blocs denses, qui la
+ *  rendaient longue. La période analysée, au-dessus, reste commune à tous. */
+const viewOptions = (events: number): Array<TabOption<View>> => [
+  { value: "prefixes", label: "Préfixes", title: "Préfixes annoncés par cet AS, avec leur évolution" },
+  { value: "neighbours", label: "Voisins BGP", title: "Fournisseurs, clients et pairs observés" },
+  { value: "transit", label: "Transit", title: "Dépendance aux fournisseurs et concentration (HHI)" },
+  { value: "activity", label: "Activité", title: "Annonces et retraits dans le temps" },
+  { value: "events", label: "Événements", title: "Événements détectés impliquant cet AS", count: events },
+];
+
 export default function AsnDetail() {
   const { asn = "" } = useParams();
   useTitle(`AS${asn}`);
   const detail = useApi<AsnDetailData>(`/asns/${encodeURIComponent(asn)}`);
-  const churn = useApi<Series>("/metrics/churn", { asn });
-  const upstream = useApi<Series>("/metrics/upstreams", { asn });
+  const bounds = useDataBounds();
+  const [range, setRange] = useState<DateRange>({ from: "", to: "" });
+  // La section vit dans l'adresse (?section=voisins) : un lien partagé ou un rechargement
+  // retombe sur la même section.
+  const [params, setParams] = useSearchParams();
+  const requested = params.get("section") as View | null;
+  const view: View = VIEWS.includes(requested as View) ? (requested as View) : "prefixes";
+  const setView = (next: View) =>
+    setParams(
+      (previous) => {
+        const query = new URLSearchParams(previous);
+        if (next === "prefixes") query.delete("section");
+        else query.set("section", next);
+        return query;
+      },
+      { replace: true },
+    );
+  const effectiveRange = range.from ? range : defaultRange(bounds);
+  const churn = useApi<Series>("/metrics/churn", { asn, ...rangeParams(effectiveRange) });
+  const upstream = useApi<Series>("/metrics/upstreams", { asn, ...rangeParams(effectiveRange) });
+  const asnName = useAsnName(asn);
 
   return (
     <div className="stack">
@@ -54,7 +95,10 @@ export default function AsnDetail() {
           return (
             <>
               <div className="page-head">
-                <h1 className="mono">AS{data.asn}</h1>
+                <h1 className="mono">
+                  AS{data.asn}
+                  {asnName && <span className="muted" style={{ fontFamily: "var(--font-sans)" }}> · {asnName}</span>}
+                </h1>
                 <div className="row" style={{ marginTop: "0.4rem" }}>
                   <span className="tag">{countryLabel(country)}</span>
                   {rir && <span className="tag">{String(rir).toUpperCase()}</span>}
@@ -63,35 +107,27 @@ export default function AsnDetail() {
                 </div>
               </div>
 
-              <div className="grid cols-2">
-                <section className="card">
-                  <h2>Préfixes annoncés</h2>
-                  <div className="table-wrap">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Préfixe</th>
-                          <th className="num">Annonces</th>
-                          <th className="num">Peers</th>
-                          <th>Dernière vue</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {data.prefixes.slice(0, 25).map((p) => (
-                          <tr key={p.prefix}>
-                            <td className="mono">
-                              <Link to={`/prefixes/${encodeURIComponent(p.prefix)}`}>{p.prefix}</Link>
-                            </td>
-                            <td className="num mono">{num(p.updates)}</td>
-                            <td className="num mono">{num(p.peers)}</td>
-                            <td className="mono">{day(p.last_seen)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
+              <section className="card">
+                <div className="row" style={{ justifyContent: "space-between" }}>
+                  <h2>Période analysée</h2>
+                  <DateRangeSelector bounds={bounds} value={effectiveRange} onChange={setRange} />
+                </div>
+                <p className="card-note">
+                  S'applique à tous les graphiques et tableaux de cette page. Faire glisser la
+                  poignée sous la courbe des préfixes restreint la période.
+                </p>
+              </section>
 
+              <Tabs options={viewOptions(data.events.length)} value={view} onChange={setView} label="Sections de la page" />
+
+              {view === "prefixes" && (
+                <PrefixExplorer asn={asn} range={effectiveRange} onRangeChange={setRange} />
+              )}
+
+              {view === "neighbours" && <NeighbourExplorer asn={asn} range={effectiveRange} />}
+
+              {view === "transit" && (
+                <>
                 <section className="card">
                   <h2>Dépendance au transit</h2>
                   {data.upstreams.length === 0 ? (
@@ -102,9 +138,9 @@ export default function AsnDetail() {
                         <thead>
                           <tr>
                             <th>Fournisseur principal</th>
-                            <th className="num">Fournisseurs</th>
-                            <th className="num">HHI</th>
-                            <th className="num">Fenêtres</th>
+                            <th className="num"><Term k="upstreams">Fournisseurs</Term></th>
+                            <th className="num"><Term k="hhi">HHI</Term></th>
+                            <th className="num"><Term k="windows" /></th>
                           </tr>
                         </thead>
                         <tbody>
@@ -112,7 +148,7 @@ export default function AsnDetail() {
                             <tr key={i}>
                               <td className="mono">
                                 {u.primary_upstream ? (
-                                  <Link to={`/asns/${u.primary_upstream}`}>AS{u.primary_upstream}</Link>
+                                  <AsnLink asn={u.primary_upstream} />
                                 ) : (
                                   "—"
                                 )}
@@ -131,8 +167,28 @@ export default function AsnDetail() {
                     voisin qui n'apparaît sur aucun chemin collecté reste invisible ici.
                   </p>
                 </section>
-              </div>
 
+              <section className="card">
+                <h2><Term k="hhi" /></h2>
+                <AsyncBlock state={upstream} rows={3}>
+                  {(series) => (
+                    <TimeChart
+                      points={series.points}
+                      height={190}
+                      yDomain={[0, 1]}
+                      valueFormat={(v) => dec(v, 2)}
+                      series={[
+                        { key: "hhi_transit", label: "HHI du transit", color: PALETTE.crimson, kind: "area" },
+                      ]}
+                      note="Un HHI proche de 1 signale un point de défaillance unique : tout le trafic entrant transite par un seul fournisseur."
+                    />
+                  )}
+                </AsyncBlock>
+              </section>
+                </>
+              )}
+
+              {view === "activity" && (
               <section className="card">
                 <h2>Activité dans le temps</h2>
                 <AsyncBlock state={churn} rows={3}>
@@ -150,24 +206,9 @@ export default function AsnDetail() {
                 </AsyncBlock>
               </section>
 
-              <section className="card">
-                <h2>Concentration du transit</h2>
-                <AsyncBlock state={upstream} rows={3}>
-                  {(series) => (
-                    <TimeChart
-                      points={series.points}
-                      height={190}
-                      yDomain={[0, 1]}
-                      valueFormat={(v) => dec(v, 2)}
-                      series={[
-                        { key: "hhi_transit", label: "HHI du transit", color: PALETTE.crimson, kind: "area" },
-                      ]}
-                      note="Un HHI proche de 1 signale un point de défaillance unique : tout le trafic entrant transite par un seul fournisseur."
-                    />
-                  )}
-                </AsyncBlock>
-              </section>
+              )}
 
+              {view === "events" && (
               <section className="card">
                 <h2>Événements associés</h2>
                 {data.events.length === 0 ? (
@@ -203,6 +244,7 @@ export default function AsnDetail() {
                   </div>
                 )}
               </section>
+              )}
             </>
           );
         }}
