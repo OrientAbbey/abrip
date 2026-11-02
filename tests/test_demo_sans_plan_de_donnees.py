@@ -11,7 +11,7 @@ from __future__ import annotations
 import pytest
 
 from abrip.config import reload_settings
-from abrip.demo.bootstrap import bootstrap, verify
+from abrip.demo.bootstrap import bootstrap, verify, write_history
 from abrip.enrichment import dataplane
 
 
@@ -54,3 +54,20 @@ def test_bootstrap_sans_appel_plan_de_donnees(settings_isolee, monkeypatch):
     bilan = verify(settings_isolee)
     assert bilan["status"] == "ok" and bilan["recall"] == 1.0
     assert bilan["planted"] == 5 and len(bilan["matched"]) == 5 and bilan["missed"] == []
+
+
+def test_historique_demo_supprime_les_anciennes_dates(settings_isolee):
+    stale = settings_isolee.reference_dir / "history" / "ref_irr_route" / "date=2020-01-01"
+    stale.mkdir(parents=True)
+    (stale / "old.parquet").write_bytes(b"ancienne partition")
+
+    write_history(settings_isolee)
+
+    assert not stale.exists()
+    assert (
+        settings_isolee.reference_dir
+        / "history"
+        / "ref_irr_route"
+        / "date=2026-08-24"
+        / "part-00000.parquet"
+    ).exists()

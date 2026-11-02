@@ -7,6 +7,7 @@ fichier MRT ni attendre.
 
 from __future__ import annotations
 
+import shutil
 from datetime import timedelta
 from typing import Any, cast
 
@@ -57,6 +58,19 @@ def write_history(settings: Settings) -> dict[str, int]:
     """Écrit les instantanés ROA/Route Object datés (voir
     ``demo.generator.historical_reference_snapshots``) — donne aux modales
     d'historique du préfixe autre chose qu'une ligne unique."""
+    # Les instantanés sont partitionnés par date. `write_frame` remplace les
+    # fichiers d'une partition, mais ne connaît pas les anciennes dates qui ne
+    # font plus partie du jeu de démonstration courant. Les supprimer ici rend
+    # le bootstrap reproductible après un changement de scénario. Le bootstrap
+    # de démonstration réécrit volontairement ces deux tables ; les autres
+    # tables du répertoire de données ne sont pas concernées.
+    for table in ("ref_roa", "ref_irr_route"):
+        history_dir = settings.reference_dir / "history" / table
+        if history_dir.exists():
+            for stale in history_dir.glob("date=*"):
+                if stale.is_dir():
+                    shutil.rmtree(stale)
+
     written: dict[str, int] = {}
     for path, rows in historical_reference_snapshots().items():
         table = path.split("/")[1] if path.startswith("history/") else path
