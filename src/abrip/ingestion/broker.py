@@ -178,5 +178,14 @@ def build_archive_urls(
 
 def _floor(moment: datetime, step: timedelta) -> datetime:
     seconds = int(step.total_seconds())
-    epoch = int(moment.replace(second=0, microsecond=0).timestamp())
+    # Les dates du broker sont des dates UTC, mais plusieurs appelants
+    # fournissent des ``datetime`` naïfs. ``timestamp()`` interprète un datetime
+    # naïf dans le fuseau local : sur Windows, cela décalait le curseur d'une
+    # heure et produisait des fichiers hors de la fenêtre demandée.
+    utc_moment = (
+        moment.replace(tzinfo=UTC)
+        if moment.tzinfo is None
+        else moment.astimezone(UTC)
+    )
+    epoch = int(utc_moment.replace(second=0, microsecond=0).timestamp())
     return datetime.fromtimestamp(epoch - epoch % seconds, tz=UTC).replace(tzinfo=None)

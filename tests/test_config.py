@@ -36,7 +36,8 @@ class TestPrecedence:
     def test_environnement_prime_sur_yaml(self, monkeypatch):
         monkeypatch.setenv("ABRIP_DATA_DIR", "/tmp/abrip-test")
         settings = reload_settings()
-        assert settings.data_dir == Path("/tmp/abrip-test")
+        # Path('/tmp/...') est interprété différemment selon l'OS Windows/Unix.
+        assert settings.data_dir == Path(os.environ["ABRIP_DATA_DIR"]).absolute()
 
     def test_champ_imbrique(self, monkeypatch):
         monkeypatch.setenv("ABRIP_API__PORT", "7860")
