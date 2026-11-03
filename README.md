@@ -93,6 +93,16 @@ jq 'select(.status_code != null) | {ts, message, method, url, status_code}' data
 
 Le jeu de démonstration porte des AS fictifs : `abrip demo bootstrap` n'interroge ni IODA, ni RIPE Atlas, ni Cloudflare Radar.
 
+**Ne mélangez pas la démonstration et de vraies données dans un même répertoire.** Les préfixes de la démo sont de vrais préfixes africains : une synchronisation réelle y ajoute des objets route (RADB…) pour des préfixes que la démo croit sans objet, et ses tests d'API échouent sans qu'on comprenne pourquoi. Le bootstrap écrit donc un marqueur (`.abrip-demo.json`) et la liste de ses fichiers :
+
+```bash
+abrip demo check                 # dit si data/ est exactement la démo ; sinon, liste les fichiers étrangers
+abrip demo bootstrap --force     # écrase un répertoire qui n'est pas (que) la démo
+ABRIP_DATA_DIR=./data-reel abrip reference sync   # vraies données : un dossier à part
+```
+
+Sans `--force`, le bootstrap refuse de passer sur un répertoire contenant autre chose que la démo (il réécrit les référentiels et supprime leurs anciens instantanés). Les tests qui lisent la démo s'ignorent, avec la raison, quand le répertoire n'est pas intact. Après une mise à jour depuis une version sans marqueur, relancer une fois `abrip demo bootstrap --force`.
+
 ---
 
 ## Architecture
@@ -209,7 +219,7 @@ Toute commande supporte `--dry-run` là où elle télécharge ou écrit, et jour
 ## Tests
 
 ```bash
-make test        # 706 tests (223 + 483 ignorés sur une installation sans données)
+make test        # 715 tests (232 + 483 ignorés sur une installation sans données)
 make lint        # ruff
 make typecheck   # mypy
 ```

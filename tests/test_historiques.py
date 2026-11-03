@@ -11,12 +11,12 @@ from datetime import date
 from typing import ClassVar
 
 import pytest
+from _demo import requires_demo
 from fastapi.testclient import TestClient
 
 from abrip.api.main import create_app
 from abrip.api.routers import asn_explorer
 from abrip.api.routers.asn_explorer import _presence_status, _runs
-from abrip.config import get_settings
 
 
 def d(day: int) -> date:
@@ -82,10 +82,7 @@ class TestStatutDeLEvolution:
         assert _presence_status(set(), self.JOURS) == "unstable"
 
 
-pytestmark_data = pytest.mark.skipif(
-    not (get_settings().curated_dir / "bgp_elements").exists(),
-    reason="jeu de démonstration absent — lancer `abrip demo bootstrap`",
-)
+pytestmark_data = requires_demo
 
 
 @pytest.fixture(scope="module")

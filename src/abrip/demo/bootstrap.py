@@ -7,6 +7,7 @@ fichier MRT ni attendre.
 
 from __future__ import annotations
 
+import json
 import shutil
 from datetime import timedelta
 from typing import Any, cast
@@ -54,6 +55,81 @@ def write_reference(settings: Settings) -> dict[str, int]:
     return written
 
 
+# Un répertoire de données qui a reçu le jeu de démonstration porte un marqueur et la
+# liste des fichiers que le bootstrap y a laissés. Sans cela, impossible de savoir si
+# `data/` contient *seulement* la démonstration ou aussi de vraies données (une
+# synchronisation de référentiels, des archives MRT) : les tests de l'API, écrits
+# contre les valeurs de la démo, échouent alors de façon incompréhensible — un objet
+# route RADB bien réel apparaît pour un préfixe censé n'en avoir aucun.
+MARKER = ".abrip-demo.json"
+_TRACKED = ("reference", "curated", "analytics")
+
+
+class DatasetNotDemoError(RuntimeError):
+    """Le répertoire de données contient autre chose que la démonstration."""
+
+
+def _tracked_files(settings: Settings) -> list[str]:
+    files: list[str] = []
+    for name in _TRACKED:
+        root = settings.data_dir / name
+        if root.exists():
+            files.extend(
+                p.relative_to(settings.data_dir).as_posix() for p in root.rglob("*") if p.is_file()
+            )
+    return sorted(files)
+
+
+def dataset_state(settings: Settings) -> dict[str, object]:
+    """État du répertoire de données vis-à-vis de la démonstration.
+
+    - ``empty`` : aucune donnée ;
+    - ``demo`` : exactement ce que le bootstrap a écrit ;
+    - ``modified`` : marqueur présent, mais des fichiers en plus (``foreign``) ou en
+      moins (``missing``) — typiquement une vraie synchronisation lancée après coup ;
+    - ``unmarked`` : des données sans marqueur (démo d'une ancienne version, ou vraies
+      données) : impossible de dire ce qui est de la démonstration.
+    """
+    present = _tracked_files(settings)
+    marker = settings.data_dir / MARKER
+    if not marker.exists():
+        return {"state": "unmarked" if present else "empty", "foreign": present, "missing": []}
+    try:
+        owned = set(json.loads(marker.read_text(encoding="utf-8")).get("files", []))
+    except (OSError, ValueError):
+        owned = set()
+    foreign = sorted(set(present) - owned)
+    missing = sorted(owned - set(present))
+    return {
+        "state": "modified" if foreign or missing else "demo",
+        "foreign": foreign,
+        "missing": missing,
+    }
+
+
+def _write_marker(settings: Settings) -> None:
+    payload = {"base_date": BASE_DATE.date().isoformat(), "files": _tracked_files(settings)}
+    (settings.data_dir / MARKER).write_text(json.dumps(payload, indent=1), encoding="utf-8")
+
+
+def _refuse_if_not_demo(settings: Settings) -> None:
+    state = dataset_state(settings)
+    if state["state"] in ("empty", "demo"):
+        return
+    extra = [*cast(list[str], state["foreign"]), *cast(list[str], state["missing"])]
+    shown = "\n".join(f"  - {f}" for f in extra[:8]) + (
+        f"\n  … (+{len(extra) - 8})" if len(extra) > 8 else ""
+    )
+    raise DatasetNotDemoError(
+        f"{settings.data_dir} contient autre chose que le jeu de démonstration "
+        f"(état : {state['state']}).\n{shown}\n"
+        "Le bootstrap réécrit les référentiels et supprime leurs anciens instantanés : "
+        "sur de vraies données, ils seraient perdus ou mélangés à la démonstration.\n"
+        "Utilisez un répertoire dédié (ABRIP_DATA_DIR=./data-demo), ou --force pour "
+        "écraser celui-ci."
+    )
+
+
 def write_history(settings: Settings) -> dict[str, int]:
     """Écrit les instantanés ROA/Route Object datés (voir
     ``demo.generator.historical_reference_snapshots``) — donne aux modales
@@ -81,7 +157,11 @@ def write_history(settings: Settings) -> dict[str, int]:
     return written
 
 
-def bootstrap(settings: Settings, days: int = DEFAULT_DAYS) -> dict[str, object]:
+def bootstrap(
+    settings: Settings, days: int = DEFAULT_DAYS, *, force: bool = False
+) -> dict[str, object]:
+    if not force:
+        _refuse_if_not_demo(settings)
     settings.ensure_dirs()
     catalog = Catalog(settings.catalog_path)
 
@@ -116,6 +196,7 @@ def bootstrap(settings: Settings, days: int = DEFAULT_DAYS) -> dict[str, object]
 
     truth = ground_truth()
     _write_ground_truth(settings, truth)
+    _write_marker(settings)
 
     return {
         "period": {"from": start.isoformat(), "to": end.isoformat()},

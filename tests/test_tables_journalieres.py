@@ -14,6 +14,7 @@ from types import SimpleNamespace
 
 import polars as pl
 import pytest
+from _demo import requires_demo
 from fastapi.testclient import TestClient
 
 from abrip.analytics.daily import (
@@ -254,10 +255,7 @@ class TestFraicheur:
 
 
 # --- équivalence sur la démonstration ---------------------------------------
-pytestmark_data = pytest.mark.skipif(
-    not (get_settings().curated_dir / "bgp_elements").exists(),
-    reason="jeu de démonstration absent — lancer `abrip demo bootstrap`",
-)
+pytestmark_data = requires_demo
 
 
 @pytest.fixture(scope="module")

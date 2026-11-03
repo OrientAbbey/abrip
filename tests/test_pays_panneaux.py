@@ -9,16 +9,13 @@ direct.
 from __future__ import annotations
 
 import pytest
+from _demo import requires_demo
 from fastapi.testclient import TestClient
 
 from abrip.api.main import create_app
 from abrip.api.routers import asn_explorer
-from abrip.config import get_settings
 
-pytestmark = pytest.mark.skipif(
-    not (get_settings().curated_dir / "bgp_elements").exists(),
-    reason="jeu de démonstration absent — lancer `abrip demo bootstrap`",
-)
+pytestmark = requires_demo
 
 PAYS = ["CM", "ZA", "KE", "NG"]
 

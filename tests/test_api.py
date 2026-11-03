@@ -9,6 +9,7 @@ comporte alors correctement en renvoyant 503, ce qui est testé à part.
 from __future__ import annotations
 
 import pytest
+from _demo import requires_demo
 from fastapi.testclient import TestClient
 
 from abrip.api.main import create_app
@@ -26,10 +27,7 @@ def has_data() -> bool:
     return (settings.curated_dir / "bgp_elements").exists()
 
 
-requires_data = pytest.mark.skipif(
-    not (get_settings().curated_dir / "bgp_elements").exists(),
-    reason="jeu de démonstration absent — lancer `abrip demo bootstrap`",
-)
+requires_data = requires_demo
 
 
 class TestSante:

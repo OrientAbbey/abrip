@@ -343,14 +343,40 @@ def detect_watch(
 
 # --- démonstration ---------------------------------------------------------
 @demo_app.command("bootstrap")
-def demo_bootstrap(days: int = typer.Option(7, help="Nombre de jours à générer")) -> None:
+def demo_bootstrap(
+    days: int = typer.Option(7, help="Nombre de jours à générer"),
+    force: bool = typer.Option(
+        False, "--force", help="Écraser un répertoire de données qui n'est pas (que) la démo"
+    ),
+) -> None:
     """Génère un jeu complet et exécute tout le pipeline dessus."""
     settings, _ = _bootstrap_runtime()
-    from abrip.demo.bootstrap import bootstrap
+    from abrip.demo.bootstrap import DatasetNotDemoError, bootstrap
 
-    result = bootstrap(settings, days)
+    try:
+        result = bootstrap(settings, days, force=force)
+    except DatasetNotDemoError as error:
+        typer.secho(str(error), err=True, fg=typer.colors.RED)
+        raise typer.Exit(code=2) from error
     console.print(json.dumps(result, indent=2, default=str))
     console.print("\n[green]Prêt.[/green] Lancer ensuite : abrip api serve")
+
+
+@demo_app.command("check")
+def demo_check() -> None:
+    """Dit si le répertoire de données est exactement le jeu de démonstration.
+
+    Code de sortie 0 seulement si c'est le cas. Sinon, liste les fichiers étrangers
+    (une vraie synchronisation, un ancien bootstrap…) qui feraient échouer les tests
+    de l'API écrits contre les valeurs de la démonstration.
+    """
+    settings, _ = _bootstrap_runtime()
+    from abrip.demo.bootstrap import dataset_state
+
+    state = dataset_state(settings)
+    console.print(json.dumps({"data_dir": str(settings.data_dir), **state}, indent=2))
+    if state["state"] != "demo":
+        raise typer.Exit(code=1)
 
 
 @demo_app.command("verify")
