@@ -18,9 +18,24 @@ export default defineConfig({
       output: {
         // Séparer le socle React de la bibliothèque de graphiques : le socle
         // change rarement et reste en cache entre deux déploiements.
-        manualChunks: {
-          react: ["react", "react-dom", "react-router-dom"],
-          charts: ["recharts"],
+        // Vite 8 (rolldown) n'accepte que la forme fonctionnelle.
+        manualChunks(id) {
+          if (
+            id.includes("/node_modules/react/") ||
+            id.includes("/node_modules/react-dom/") ||
+            id.includes("/node_modules/react-router") ||
+            id.includes("/node_modules/scheduler/")
+          ) {
+            return "react";
+          }
+          if (
+            id.includes("/node_modules/recharts/") ||
+            id.includes("/node_modules/d3-") ||
+            id.includes("/node_modules/victory-vendor/")
+          ) {
+            return "charts";
+          }
+          return undefined;
         },
       },
     },
