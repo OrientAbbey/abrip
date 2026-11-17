@@ -150,7 +150,7 @@ frontend/                React + Vite + TypeScript + Recharts
 
 **Un parseur MRT derrière une interface unique.** Quatre implémentations possibles (`bgpkit-parser`, `mrtparse`, `pybgpstream`, générateur synthétique) sont classées par ordre de préférence et sélectionnées automatiquement selon ce qui est installé. Le reste du code ne sait pas laquelle est active. C'est ce qui permet au projet de démarrer sur une machine sans dépendance native compilée.
 
-**Recharts pour les graphiques.** Composants React déclaratifs, bien maintenus, et le découpage du bundle isole la bibliothèque dans son propre fragment. Total transféré : 208 Ko compressés, sous le budget de 250 Ko fixé au cahier des charges.
+**Recharts pour les graphiques.** Composants React déclaratifs, bien maintenus, et le découpage du bundle isole la bibliothèque dans son propre fragment. Total transféré : 240 Ko compressés, sous le budget de 250 Ko fixé au cahier des charges.
 
 **Le score z robuste plutôt que l'écart-type.** Le churn BGP est très asymétrique : un seul pic gonfle l'écart-type au point de masquer les pics suivants. La médiane et l'écart absolu médian restent calés sur le bruit de fond.
 
@@ -219,7 +219,7 @@ Toute commande supporte `--dry-run` là où elle télécharge ou écrit, et jour
 ## Tests
 
 ```bash
-make test        # 715 tests (232 + 483 ignorés sur une installation sans données)
+make test        # 728 tests (245 + 483 ignorés sur une installation sans données)
 make lint        # ruff
 make typecheck   # mypy
 ```
