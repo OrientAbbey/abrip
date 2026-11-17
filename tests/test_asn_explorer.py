@@ -91,6 +91,21 @@ class TestPrefixSeries:
         # 1 stable + 1 « left » actif jours 0-3, + 1 « new » actif jours 3-6.
         assert values[0] == 2 and values[3] == 3 and values[-1] == 2
 
+    def test_borne_de_fin_incluse_meme_sans_heure(self, client):
+        """`to=AAAA-MM-JJ` vaut minuit : la fenêtre doit couvrir toute la journée.
+
+        Une implémentation qui compare directement `ts <= to` renvoie alors une
+        série vide, ou s'arrête au premier instant du jour. La borne de fin est
+        donc exclusive au lendemain, comme dans les tableaux journaliers.
+        """
+        jour = "2026-08-27"
+        body = client.get(
+            "/api/asns/37100/prefixes/timeseries",
+            params={"from": jour, "to": jour},
+        ).json()
+        assert body["points"]
+        assert {p["ts"][:10] for p in body["points"]} == {jour}
+
 
 class TestHistory:
     def test_historique_roa_montre_le_resserrement(self, client):

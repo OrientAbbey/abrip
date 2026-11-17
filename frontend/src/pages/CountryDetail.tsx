@@ -1,21 +1,29 @@
+import { useState } from "react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { NeighbourExplorer } from "../components/NeighbourExplorer";
 import { PrefixExplorer } from "../components/PrefixExplorer";
-import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { useApi, useTitle } from "../lib/useApi";
-import { defaultRange, useDataBounds } from "../lib/useDataBounds";
-import type { AsnSummary, CountryRelation, CountryRelationships, Page, Series } from "../lib/types";
 import { AsnLink } from "../components/AsnLink";
 import { DateRangeSelector, rangeParams, type DateRange } from "../components/DateRangeSelector";
 import { AsyncBlock, EmptyState } from "../components/StateBlock";
 import { Tabs, type TabOption } from "../components/Tabs";
 import { Term } from "../components/Term";
 import { PALETTE, TimeChart } from "../components/TimeChart";
+import { useApi, useTitle } from "../lib/useApi";
+import { defaultRange, useDataBounds } from "../lib/useDataBounds";
+import type { AsnSummary, CountryRelation, CountryRelationships, Page, Series } from "../lib/types";
 import { countryLabel, dec, num } from "../lib/format";
 
-type Tab = "asns" | "providers" | "customers" | "peers";
+type RelationTab = "asns" | "providers" | "customers" | "peers";
+type Section = "overview" | "prefixes" | "neighbours";
 
-const TITLES: Record<Tab, string> = {
+const SECTIONS: Section[] = ["overview", "prefixes", "neighbours"];
+const SECTION_OPTIONS: Array<TabOption<Section>> = [
+  { value: "overview", label: "Vue d'ensemble", title: "Tendance, AS du pays et relations" },
+  { value: "prefixes", label: "Préfixes", title: "Préfixes originés par les AS du pays" },
+  { value: "neighbours", label: "Voisins BGP", title: "Voisins des AS du pays" },
+];
+
+const RELATION_TITLES: Record<RelationTab, string> = {
   asns: "Systèmes autonomes alloués à ce pays et observés",
   providers: "AS étrangers au pays qui lui vendent du transit (relation CAIDA : fournisseur)",
   customers: "AS étrangers au pays qui lui achètent du transit (relation CAIDA : client)",
@@ -74,17 +82,32 @@ export default function CountryDetail() {
   const bounds = useDataBounds();
   const [range, setRange] = useState<DateRange>({ from: "", to: "" });
   const effectiveRange = range.from ? range : defaultRange(bounds);
-  const [tab, setTab] = useState<Tab>("asns");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedSection = searchParams.get("section") as Section | null;
+  const section = requestedSection && SECTIONS.includes(requestedSection) ? requestedSection : "overview";
+  const setSection = (next: Section) => {
+    const params = new URLSearchParams(searchParams);
+    if (next === "overview") params.delete("section");
+    else params.set("section", next);
+    setSearchParams(params, { replace: true });
+  };
+  const [relationTab, setRelationTab] = useState<RelationTab>("asns");
+  const overview = section === "overview";
 
-  const relations = useApi<CountryRelationships>(`/countries/${code}/relationships`);
-  const trend = useApi<Series>("/metrics/countries", { country: code, ...rangeParams(effectiveRange) });
-  const asns = useApi<Page<AsnSummary>>("/asns", { country: code, limit: 200 });
+  // Les données de la vue d'ensemble ne sont demandées que si elle est affichée :
+  // un lien direct vers ?section=prefixes ne charge ni tendance, ni relations, ni liste d'AS.
+  const relations = useApi<CountryRelationships>(overview ? `/countries/${code}/relationships` : null);
+  const trend = useApi<Series>(
+    overview ? "/metrics/countries" : null,
+    { country: code, ...rangeParams(effectiveRange) },
+  );
+  const asns = useApi<Page<AsnSummary>>(overview ? "/asns" : null, { country: code, limit: 200 });
 
-  const options: Array<TabOption<Tab>> = [
-    { value: "asns", label: "AS", title: TITLES.asns, count: relations.data?.asns.length },
-    { value: "providers", label: "Fournisseurs", title: TITLES.providers, count: relations.data?.providers.length },
-    { value: "customers", label: "Clients", title: TITLES.customers, count: relations.data?.customers.length },
-    { value: "peers", label: "Peerings", title: TITLES.peers, count: relations.data?.peers.length },
+  const relationOptions: Array<TabOption<RelationTab>> = [
+    { value: "asns", label: "AS", title: RELATION_TITLES.asns, count: relations.data?.asns.length },
+    { value: "providers", label: "Fournisseurs", title: RELATION_TITLES.providers, count: relations.data?.providers.length },
+    { value: "customers", label: "Clients", title: RELATION_TITLES.customers, count: relations.data?.customers.length },
+    { value: "peers", label: "Peerings", title: RELATION_TITLES.peers, count: relations.data?.peers.length },
   ];
 
   return (
@@ -105,85 +128,100 @@ export default function CountryDetail() {
 
       <section className="card">
         <div className="row" style={{ justifyContent: "space-between" }}>
-          <h2>Tendance</h2>
+          <h2>Période analysée</h2>
           <DateRangeSelector bounds={bounds} value={effectiveRange} onChange={setRange} />
         </div>
-        <AsyncBlock state={trend} rows={3}>
-          {(data) => (
-            <TimeChart
-              points={data.points}
-              height={230}
-              yDomain={[0, 1]}
-              valueFormat={(v) => dec(v, 2)}
-              series={[
-                { key: "transit_dependency_ratio", label: "Dépendance au transit étranger", color: PALETTE.crimson },
-                { key: "hhi_transit", label: "Concentration du transit (HHI)", color: PALETTE.amber },
-                { key: "visibility", label: "Visibilité moyenne", color: PALETTE.teal },
-              ]}
-            />
-          )}
-        </AsyncBlock>
         <p className="card-note">
-          <Term k="dependency" />, <Term k="hhi" /> et <Term k="visibility" /> : survolez un terme
-          pour sa définition.
+          La plage s'applique à la tendance et aux sections Préfixes et Voisins. La poignée sous le
+          graphe des préfixes permet aussi de la modifier.
         </p>
       </section>
 
-      <section className="card">
-        <h2>Systèmes autonomes et relations</h2>
-        <Tabs options={options} value={tab} onChange={setTab} label="Type de relation" />
+      <Tabs options={SECTION_OPTIONS} value={section} onChange={setSection} label="Sections de la fiche pays" />
 
-        {tab === "asns" ? (
-          <AsyncBlock state={asns} rows={4}>
-            {(page) =>
-              page.items.length === 0 ? (
-                <EmptyState title="Aucun AS observé pour ce pays" />
-              ) : (
-                <div className="table-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>AS</th>
-                        <th className="num">Préfixes</th>
-                        <th className="num"><Term k="upstreams" /></th>
-                        <th>Transit principal</th>
-                        <th className="num"><Term k="hhi" /></th>
-                        <th className="num">Événements</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {page.items.map((a) => (
-                        <tr key={a.asn}>
-                          <td className="mono"><AsnLink asn={a.asn} className="" /></td>
-                          <td className="num mono">{num(a.prefixes)}</td>
-                          <td className="num mono">{num(a.upstream_count)}</td>
-                          <td className="mono">
-                            {a.primary_upstream ? <AsnLink asn={a.primary_upstream} className="" /> : "—"}
-                          </td>
-                          <td className="num mono">{dec(a.hhi_transit)}</td>
-                          <td className="num mono">{num(a.open_events)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )
-            }
-          </AsyncBlock>
-        ) : (
-          <AsyncBlock state={relations} rows={4}>
-            {(data) => <RelationTable rows={data[tab]} />}
-          </AsyncBlock>
-        )}
-        <p className="card-note">
-          Un fournisseur ou un pair est classé du point de vue du pays : il est relié à au moins un
-          de ses AS et n'en fait pas partie. Les relations sont celles de CAIDA, inférées des chemins
-          observés.
-        </p>
-      </section>
+      {section === "overview" && (
+        <>
+          <section className="card">
+            <h2>Tendance</h2>
+            <AsyncBlock state={trend} rows={3}>
+              {(data) => (
+                <TimeChart
+                  points={data.points}
+                  height={230}
+                  yDomain={[0, 1]}
+                  valueFormat={(v) => dec(v, 2)}
+                  series={[
+                    { key: "transit_dependency_ratio", label: "Dépendance au transit étranger", color: PALETTE.crimson },
+                    { key: "hhi_transit", label: "Concentration du transit (HHI)", color: PALETTE.amber },
+                    { key: "visibility", label: "Visibilité moyenne", color: PALETTE.teal },
+                  ]}
+                />
+              )}
+            </AsyncBlock>
+            <p className="card-note">
+              <Term k="dependency" />, <Term k="hhi" /> et <Term k="visibility" /> : survolez un terme
+              pour sa définition.
+            </p>
+          </section>
 
-      <PrefixExplorer country={code} range={effectiveRange} onRangeChange={setRange} />
-      <NeighbourExplorer country={code} range={effectiveRange} />
+          <section className="card">
+            <h2>Systèmes autonomes et relations</h2>
+            <Tabs options={relationOptions} value={relationTab} onChange={setRelationTab} label="Type de relation" />
+            {relationTab === "asns" ? (
+              <AsyncBlock state={asns} rows={4}>
+                {(page) =>
+                  page.items.length === 0 ? (
+                    <EmptyState title="Aucun AS observé pour ce pays" />
+                  ) : (
+                    <div className="table-wrap">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>AS</th>
+                            <th className="num">Préfixes</th>
+                            <th className="num"><Term k="upstreams" /></th>
+                            <th>Transit principal</th>
+                            <th className="num"><Term k="hhi" /></th>
+                            <th className="num">Événements</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {page.items.map((a) => (
+                            <tr key={a.asn}>
+                              <td className="mono"><AsnLink asn={a.asn} className="" /></td>
+                              <td className="num mono">{num(a.prefixes)}</td>
+                              <td className="num mono">{num(a.upstream_count)}</td>
+                              <td className="mono">
+                                {a.primary_upstream ? <AsnLink asn={a.primary_upstream} className="" /> : "—"}
+                              </td>
+                              <td className="num mono">{dec(a.hhi_transit)}</td>
+                              <td className="num mono">{num(a.open_events)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )
+                }
+              </AsyncBlock>
+            ) : (
+              <AsyncBlock state={relations} rows={4}>
+                {(data) => <RelationTable rows={data[relationTab]} />}
+              </AsyncBlock>
+            )}
+            <p className="card-note">
+              Un fournisseur ou un pair est classé du point de vue du pays : il est relié à au moins un
+              de ses AS et n'en fait pas partie. Les relations sont celles de CAIDA, inférées des chemins
+              observés.
+            </p>
+          </section>
+        </>
+      )}
+
+      {section === "prefixes" && (
+        <PrefixExplorer country={code} range={effectiveRange} onRangeChange={setRange} />
+      )}
+      {section === "neighbours" && <NeighbourExplorer country={code} range={effectiveRange} />}
     </div>
   );
 }
