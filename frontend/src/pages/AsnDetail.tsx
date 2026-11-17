@@ -13,7 +13,7 @@ import { Tabs, type TabOption } from "../components/Tabs";
 import { Term } from "../components/Term";
 import { SeverityBadge } from "../components/Badges";
 import { PALETTE, TimeChart } from "../components/TimeChart";
-import { countryLabel, dec, detectorLabel, dt, num } from "../lib/format";
+import { countryLabel, day, dec, detectorLabel, dt, num } from "../lib/format";
 
 interface AsnDetailData {
   asn: number;
@@ -121,7 +121,50 @@ export default function AsnDetail() {
               <Tabs options={viewOptions(data.events.length)} value={view} onChange={setView} label="Sections de la page" />
 
               {view === "prefixes" && (
-                <PrefixExplorer asn={asn} range={effectiveRange} onRangeChange={setRange} />
+                <>
+                  <section className="card">
+                    <h2>Préfixes annoncés</h2>
+                    {data.prefixes.length === 0 ? (
+                      <p className="muted">Aucun préfixe observé pour cet AS.</p>
+                    ) : (
+                      <>
+                        <div className="table-wrap">
+                          <table>
+                            <thead>
+                              <tr>
+                                <th>Préfixe</th>
+                                <th className="num">Annonces</th>
+                                <th className="num">Peers</th>
+                                <th>Dernière vue</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {data.prefixes.slice(0, 25).map((prefix) => (
+                                <tr key={prefix.prefix}>
+                                  <td className="mono">
+                                    <Link to={`/prefixes/${encodeURIComponent(prefix.prefix)}`}>
+                                      {prefix.prefix}
+                                    </Link>
+                                  </td>
+                                  <td className="num mono">{num(prefix.updates)}</td>
+                                  <td className="num mono">{num(prefix.peers)}</td>
+                                  <td className="mono">{day(prefix.last_seen)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        {data.prefixes.length > 25 && (
+                          <p className="card-note">
+                            25 premiers préfixes sur {num(data.prefixes.length)} ; l'explorateur
+                            ci-dessous donne la liste complète.
+                          </p>
+                        )}
+                      </>
+                    )}
+                  </section>
+                  <PrefixExplorer asn={asn} range={effectiveRange} onRangeChange={setRange} />
+                </>
               )}
 
               {view === "neighbours" && <NeighbourExplorer asn={asn} range={effectiveRange} />}
