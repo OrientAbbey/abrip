@@ -99,3 +99,14 @@ export const RELATION_LABEL: Record<string, string> = {
 };
 
 export const relationLabel = (key: string): string => RELATION_LABEL[key] ?? key;
+
+/** Code CAIDA brut, du point de vue de l'AS affiché : p2c = le voisin est
+ *  fournisseur, c2p = il est client, p2p = peering. */
+const RELATION_CODE: Record<string, string> = {
+  provider: "p2c",
+  customer: "c2p",
+  peer: "p2p",
+  unspecified: "unknown",
+};
+
+export const relationCode = (key: string): string => RELATION_CODE[key] ?? key;

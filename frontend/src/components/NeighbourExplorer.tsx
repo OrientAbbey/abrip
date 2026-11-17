@@ -23,7 +23,7 @@ import { Modal } from "./Modal";
 import { DayStrip, PeriodsTable } from "./PeriodsTable";
 import { Tabs, type TabOption } from "./Tabs";
 import { PALETTE, TimeChart, type ChartSeries } from "./TimeChart";
-import { countryLabel } from "../lib/format";
+import { countryLabel, relationCode } from "../lib/format";
 
 type Tab = NeighbourType | "all";
 
@@ -61,7 +61,7 @@ function RelationModal({
         <dt>Voisin</dt>
         <dd><AsnLabel asn={neighbour} /></dd>
         <dt>Type</dt>
-        <dd>{state.data ? TYPE_LABEL[state.data.type] : "…"}</dd>
+        <dd className="mono">{state.data ? relationCode(state.data.type) : "…"}</dd>
       </dl>
       <AsyncBlock state={state} rows={3}>
         {(data) => (
@@ -71,6 +71,7 @@ function RelationModal({
                 <h3>{family === "ipv4" ? "IPv4" : "IPv6"}</h3>
                 <PeriodsTable
                   runs={data[family]}
+                  relationType={relationCode(data.type)}
                   empty={`Jamais observés côte à côte en ${family === "ipv4" ? "IPv4" : "IPv6"} sur la période.`}
                 />
                 {data[family].length > 0 && (

@@ -8,10 +8,13 @@ import { num } from "../lib/format";
 export function PeriodsTable({
   runs,
   withObservations = false,
+  relationType,
   empty,
 }: {
   runs: PeriodRun[];
   withObservations?: boolean;
+  /** Code CAIDA brut (p2c, c2p, p2p, unknown) pour un historique de relation. */
+  relationType?: string;
   empty: string;
 }) {
   if (runs.length === 0) return <p className="muted">{empty}</p>;
@@ -20,27 +23,23 @@ export function PeriodsTable({
       <table>
         <thead>
           <tr>
-            <th>Début</th>
-            <th>Fin</th>
+            <th>Première vue</th>
+            <th>Dernière vue</th>
             <th className="num">Jours</th>
             {withObservations && <th className="num">Annonces</th>}
-            <th>État</th>
+            {relationType && <th>Type</th>}
           </tr>
         </thead>
         <tbody>
           {runs.map((run) => (
             <tr key={run.first_seen}>
               <td className="mono">{run.first_seen}</td>
-              <td className="mono">{run.last_seen}</td>
+              <td className="mono">
+                {run.active ? <span className="badge reassuring">Active</span> : run.last_seen}
+              </td>
               <td className="num mono">{num(run.days)}</td>
               {withObservations && <td className="num mono">{num(run.observations ?? 0)}</td>}
-              <td>
-                {run.active ? (
-                  <span className="badge reassuring">en cours</span>
-                ) : (
-                  <span className="muted">terminée</span>
-                )}
-              </td>
+              {relationType && <td className="mono">{relationType}</td>}
             </tr>
           ))}
         </tbody>
