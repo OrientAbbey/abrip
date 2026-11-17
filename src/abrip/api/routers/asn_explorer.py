@@ -28,7 +28,7 @@ from pydantic import BaseModel
 from abrip.analytics.daily import ADJACENCY, PREFIX_ORIGIN, adjacency_sql, summary_is_current
 from abrip.api.deps import DataAccess, clamp_limit, get_data_access
 from abrip.api.schemas import Page, Series, TimePoint
-from abrip.reference.history import classify_presence
+from abrip.reference.history import annotate_history, classify_presence, snapshot_dates
 from abrip.reference.irr import IrrValidator
 from abrip.reference.rpki import RpkiValidator
 
@@ -383,7 +383,8 @@ def _history(
     data: DataAccess, table: str, columns: list[tuple[str, str]], prefix: str, asn: int
 ) -> list[dict[str, Any]]:
     """Regroupe les instantanés datés d'un référentiel en lignes « première /
-    dernière apparition ». ``columns`` est une liste ``(expression, alias)``.
+    dernière apparition », avec le changement classé (new/left/unstable/stable).
+    ``columns`` est une liste ``(expression, alias)``.
 
     Sans historique daté (aucune synchronisation encore faite), rend la table
     courante, en indiquant que la date n'est pas connue plutôt que d'inventer
@@ -395,18 +396,22 @@ def _history(
     """
     select = ", ".join(f"{expr} AS {alias}" for expr, alias in columns)
     group = ", ".join(expr for expr, _ in columns)
+    dates = snapshot_dates(data.settings.reference_dir, table)
     history_dir = data.settings.reference_dir / "history" / table
     files = sorted(history_dir.glob("date=*/*.parquet")) if history_dir.exists() else []
     if files:
         source = ", ".join(f"'{f}'" for f in files)
         rows = data.query(
-            f"""SELECT {select}, min(snapshot_date) AS first_seen, max(snapshot_date) AS last_seen
+            f"""SELECT {select},
+                       min(snapshot_date) AS first_seen, max(snapshot_date) AS last_seen,
+                       list(snapshot_date ORDER BY snapshot_date) AS seen_on
                 FROM read_parquet([{source}], union_by_name=true)
                 WHERE prefix = $1
                 GROUP BY {group}
                 ORDER BY first_seen""",
             [prefix],
         )
+        annotate_history(rows, dates)
     else:
         current = data.settings.reference_dir / table
         files = sorted(current.glob("*.parquet")) if current.exists() else []
@@ -419,6 +424,9 @@ def _history(
                 WHERE prefix = $1""",
             [prefix],
         )
+        for row in rows:
+            row["change"] = "unknown"
+            row["active"] = False
     for row in rows:
         row["match"] = int(row["origin"]) == asn
     return rows

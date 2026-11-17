@@ -20,6 +20,8 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from datetime import date, datetime
+from pathlib import Path
+from typing import Any
 
 
 def _day(value: date | datetime | str) -> date:
@@ -72,3 +74,33 @@ def classify_presence(
     if present_start and not present_end:
         return "left"
     return "unstable"  # apparue puis disparue entièrement dans la fenêtre
+
+
+def snapshot_dates(reference_dir: Path, table: str) -> list[str]:
+    """Dates des instantanés disponibles pour un référentiel historisé."""
+    root = reference_dir / "history" / table
+    if not root.exists():
+        return []
+    return sorted(
+        child.name.removeprefix("date=")
+        for child in root.iterdir()
+        if child.is_dir() and child.name.startswith("date=")
+    )
+
+
+def annotate_history(
+    rows: list[dict[str, Any]], dates: list[str]
+) -> list[dict[str, Any]]:
+    """Ajoute ``change`` et ``active`` à des lignes d'historique.
+
+    Chaque ligne doit porter ``seen_on`` (liste des dates d'instantané où
+    l'entité a été vue), ``first_seen`` et ``last_seen``. La classification
+    réutilise la règle unique de ce module ; ``active`` signifie que la dernière
+    vue est le dernier instantané de la plage.
+    """
+    for row in rows:
+        seen = row.pop("seen_on", []) or []
+        seen = [str(value)[:10] for value in seen]
+        row["change"] = classify_presence(seen, dates) if dates else "unknown"
+        row["active"] = bool(dates) and row.get("last_seen") == dates[-1]
+    return rows

@@ -193,6 +193,10 @@ export interface HistoryRow {
   source?: string;
   first_seen: string | null;
   last_seen: string | null;
+  /** new / left / unstable / stable ; unknown quand aucun instantané daté n'existe. */
+  change?: string;
+  /** Dernière vue = dernier instantané de la plage. */
+  active?: boolean;
   match: boolean;
 }
 

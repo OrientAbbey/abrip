@@ -127,6 +127,9 @@ class TestHistory:
         max_lengths = [row["max_length"] for row in body["rows"]]
         assert max_lengths == [24, 22]
         assert all(row["match"] for row in body["rows"])
+        # Le /24 n'existe plus au dernier instantané, le /22 apparaît alors.
+        assert [row["change"] for row in body["rows"]] == ["left", "new"]
+        assert [row["active"] for row in body["rows"]] == [False, True]
 
     def test_match_faux_pour_un_autre_as(self, client):
         body = client.get("/api/asns/99999/prefixes/196.216.32.0/20/roa-history").json()

@@ -7,7 +7,7 @@
  *  bien le tableau.
  */
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useApi } from "../lib/useApi";
 import { rangeParams, type DateRange } from "./DateRangeSelector";
@@ -48,6 +48,13 @@ const STATUS_TABS: Array<TabOption<PrefixStatus | "all">> = [
     title: "Préfixes apparus puis disparus plusieurs fois pendant la période sélectionnée",
   },
 ];
+
+const CHANGE_BADGE: Record<string, ReactNode> = {
+  new: <span className="badge reassuring">Nouveau</span>,
+  left: <span className="badge watch">Retiré</span>,
+  unstable: <span className="badge critical">Instable</span>,
+  stable: <span className="badge reassuring">Stable</span>,
+};
 
 const STATUS_LABEL: Record<PrefixStatus, string> = {
   stable: "stable", new: "new", left: "left", unstable: "unstable",
@@ -141,8 +148,9 @@ function HistoryModal({ asn, modal, onClose }: { asn: string; modal: NonNullable
                     <th>Origine</th>
                     {isRoa ? <th>Trust Anchor</th> : <th>Source</th>}
                     {isRoa && <th className="num">Longueur max.</th>}
-                    <th>Première observation (UTC)</th>
-                    <th>Dernière observation (UTC)</th>
+                    <th>Première vue</th>
+                    <th>Dernière vue</th>
+                    <th>Changement</th>
                     <th>Concordance</th>
                   </tr>
                 </thead>
@@ -154,7 +162,14 @@ function HistoryModal({ asn, modal, onClose }: { asn: string; modal: NonNullable
                       {isRoa ? <td>{row.trust_anchor}</td> : <td>{row.source}</td>}
                       {isRoa && <td className="num mono">/{row.max_length}</td>}
                       <td className="mono">{row.first_seen ?? "—"}</td>
-                      <td className="mono">{row.last_seen ?? "—"}</td>
+                      <td className="mono">
+                        {row.active ? (
+                          <span className="badge reassuring">Active</span>
+                        ) : (
+                          row.last_seen ?? "—"
+                        )}
+                      </td>
+                      <td>{CHANGE_BADGE[row.change ?? "unknown"] ?? <span className="muted">{row.change ?? "—"}</span>}</td>
                       <td>
                         <span className={row.match ? "badge reassuring" : "badge critical"}>
                           {row.match ? "concorde" : "discorde"}
@@ -169,9 +184,10 @@ function HistoryModal({ asn, modal, onClose }: { asn: string; modal: NonNullable
         }
       </AsyncBlock>
       <p className="card-note">
-        « Concordance » compare l'origine enregistrée à l'AS spécifié ci-dessus. Les dates sont celles des
-        instantanés de synchronisation : une ligne « — » signifie qu'aucun historique daté n'a
-        encore été collecté.
+        « Concordance » compare l'origine enregistrée à l'AS spécifié ci-dessus. « Changement » qualifie
+        l'état sur les instantanés de synchronisation : Nouveau, Retiré, Instable ou Stable. Les dates
+        sont celles des instantanés ; une ligne « — » signifie qu'aucun historique daté n'a encore été
+        collecté.
       </p>
     </Modal>
   );
