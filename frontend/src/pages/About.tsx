@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { getApiKey, setApiKey } from "../lib/api";
 import { useApi, useTitle } from "../lib/useApi";
 import type { Health } from "../lib/types";
 import { AsyncBlock } from "../components/StateBlock";
@@ -37,6 +39,7 @@ const DETECTORS: Array<[string, string]> = [
 
 export default function About() {
   useTitle("À propos");
+  const [apiKey, setApiKeyDraft] = useState(getApiKey() ?? "");
   const health = useApi<Health>("/health");
 
   return (
@@ -151,6 +154,38 @@ export default function About() {
             </>
           )}
         </AsyncBlock>
+      </section>
+
+      <section className="card">
+        <h2>Accès à l'API</h2>
+        <p className="card-note">
+          Si le service exige une clé, renseignez-la ici : elle est conservée dans ce navigateur
+          et envoyée sur chaque requête. Laissez le champ vide pour un usage local sans clé.
+        </p>
+        <div className="filters">
+          <div className="field">
+            <label htmlFor="api-key">Clé API</label>
+            <input
+              id="api-key"
+              type="password"
+              value={apiKey}
+              autoComplete="off"
+              placeholder="facultatif"
+              onChange={(event) => setApiKeyDraft(event.target.value)}
+            />
+          </div>
+          <div className="row" style={{ alignItems: "flex-end", gap: "0.4rem" }}>
+            <button
+              type="button"
+              onClick={() => {
+                setApiKey(apiKey);
+                window.location.reload();
+              }}
+            >
+              Enregistrer
+            </button>
+          </div>
+        </div>
       </section>
 
       <section className="card prose">
