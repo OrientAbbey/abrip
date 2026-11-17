@@ -107,6 +107,19 @@ class TestPrefixSeries:
         assert {p["ts"][:10] for p in body["points"]} == {jour}
 
 
+class TestPrefixFacets:
+    def test_comptes_par_famille_et_statut(self, client):
+        facets = client.get("/api/asns/37100/prefixes/facets").json()
+        items = client.get("/api/asns/37100/prefixes", params={"limit": 500}).json()["items"]
+        assert facets["ip_version"] == {
+            key: sum(1 for i in items if str(i["ip_version"]) == key) for key in ("4", "6")
+        }
+        assert facets["status"] == {
+            key: sum(1 for i in items if i["status"] == key)
+            for key in ("stable", "new", "left", "unstable")
+        }
+
+
 class TestHistory:
     def test_historique_roa_montre_le_resserrement(self, client):
         body = client.get("/api/asns/37200/prefixes/196.216.32.0/20/roa-history").json()
@@ -114,6 +127,9 @@ class TestHistory:
         max_lengths = [row["max_length"] for row in body["rows"]]
         assert max_lengths == [24, 22]
         assert all(row["match"] for row in body["rows"])
+        # Le /24 n'existe plus au dernier instantané, le /22 apparaît alors.
+        assert [row["change"] for row in body["rows"]] == ["left", "new"]
+        assert [row["active"] for row in body["rows"]] == [False, True]
 
     def test_match_faux_pour_un_autre_as(self, client):
         body = client.get("/api/asns/99999/prefixes/196.216.32.0/20/roa-history").json()

@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Historique ROA — avant / après</title>
+<style>
+  :root {
+    --ink-900:#0b1b2b; --ink-800:#12293d; --ink-500:#3f6079; --ink-400:#63819a;
+    --paper:#f2f4f1; --paper-raised:#fbfcfa; --paper-sunk:#e6eae6; --rule:#cfd8d4;
+    --amber:#b8730f; --amber-soft:#f4e3c8; --teal:#1f6f6a; --teal-soft:#d4e6e3;
+    --crimson:#9d2f33; --crimson-soft:#f3d9d9; --radius:3px;
+    --font-ui:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --font-mono:ui-monospace,"SF Mono",Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink-800);font-family:var(--font-ui);font-size:13px;padding:18px}
+  h1{font-family:Georgia,serif;font-size:22px;margin:0 0 4px}
+  h2{font-family:Georgia,serif;font-size:17px;margin:0 0 12px}
+  p.lead{color:var(--ink-500);margin:0 0 18px;max-width:900px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  .panel{background:var(--paper-raised);border:1px solid var(--rule);border-radius:var(--radius);
+    box-shadow:0 8px 32px rgba(11,27,43,.18);padding:16px}
+  .panel header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;
+    border-bottom:1px solid var(--rule);padding-bottom:8px}
+  .panel header h2{margin:0}
+  .tag{font-size:11px;border:1px solid var(--rule);border-radius:2px;padding:2px 6px;color:var(--ink-500)}
+  .tag.after{background:var(--teal-soft);border-color:var(--teal);color:var(--ink-900);font-weight:600}
+  dl.kv{display:grid;grid-template-columns:120px 1fr;gap:2px 8px;margin:0 0 12px}
+  dl.kv dt{color:var(--ink-500)} dl.kv dd{margin:0}
+  .mono{font-family:var(--font-mono);font-size:12px}
+  table{width:100%;border-collapse:collapse;background:var(--paper-raised)}
+  th,td{text-align:left;padding:6px 7px;border-bottom:1px solid var(--rule);white-space:nowrap}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:var(--ink-500);background:var(--paper-sunk)}
+  .badge{border-radius:2px;padding:2px 6px;font-size:11px;font-weight:600}
+  .badge.reassuring{background:var(--teal-soft);color:#0f4f4b}
+  .badge.watch{background:var(--amber-soft);color:#7a4c08}
+  .badge.critical{background:var(--crimson-soft);color:#7a1f22}
+  .muted{color:var(--ink-400)}
+  .note{font-size:11px;color:var(--ink-500);margin-top:12px;border-top:1px solid var(--rule);padding-top:8px}
+  .legend{display:flex;gap:10px;align-items:center;margin-top:10px;font-size:12px}
+</style>
+</head>
+<body>
+  <h1>Historique RPKI ROA — avant / après</h1>
+  <p class="lead">Maquette de la modale d'historique d'un ROA (exemple : <span class="mono">196.216.32.0/20</span>, passage de /24 à /22). À gauche, l'état actuel de <code>dev_cl</code>. À droite, l'apport du point 4 : le diff d'instantanés de <code>dev_cl5</code> porté dans l'interface de <code>dev_cl</code>.</p>
+  <div class="grid">
+    <section class="panel">
+      <header><h2>Avant — lignes brutes</h2><span class="tag">dev_cl actuel</span></header>
+      <dl class="kv">
+        <dt>Préfixe</dt><dd class="mono">196.216.32.0/20</dd>
+        <dt>AS spécifié</dt><dd class="mono">AS37200 · WOURI-NETWORKS</dd>
+      </dl>
+      <table>
+        <thead><tr><th>Origine</th><th>Trust Anchor</th><th>Longueur max.</th><th>Première observation</th><th>Dernière observation</th><th>Concordance</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">AS37200</td><td>afrinic</td><td class="mono">/24</td><td class="mono">2026-08-24</td><td class="mono">2026-08-25</td><td><span class="badge reassuring">concorde</span></td></tr>
+          <tr><td class="mono">AS37200</td><td>afrinic</td><td class="mono">/22</td><td class="mono">2026-08-26</td><td class="mono">30 août 2026</td><td><span class="badge reassuring">concorde</span></td></tr>
+        </tbody>
+      </table>
+      <p class="note">Deux lignes distinctes, sans indication qu'il s'agit d'une modification du ROA. L'utilisateur doit comparer les longueurs et les dates lui-même.</p>
+    </section>
+    <section class="panel">
+      <header><h2>Après — historique classé</h2><span class="tag after">avec point 4</span></header>
+      <dl class="kv">
+        <dt>Préfixe</dt><dd class="mono">196.216.32.0/20</dd>
+        <dt>Contexte</dt><dd class="mono">AS37200 · WOURI-NETWORKS</dd>
+      </dl>
+      <table>
+        <thead><tr><th>Origine</th><th>Trust Anchor</th><th>Longueur max.</th><th>Première vue</th><th>Dernière vue</th><th>Changement</th><th>Concordance</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">AS37200</td><td>afrinic</td><td class="mono">/24</td><td class="mono">2026-08-24</td><td class="mono">2026-08-25</td><td><span class="badge watch">Retiré</span></td><td><span class="badge reassuring">concorde</span></td></tr>
+          <tr><td class="mono">AS37200</td><td>afrinic</td><td class="mono">/22</td><td class="mono">2026-08-26</td><td><span class="badge reassuring">Active</span></td><td><span class="badge reassuring">Nouveau</span></td><td><span class="badge reassuring">concorde</span></td></tr>
+        </tbody>
+      </table>
+      <p class="note">Une colonne « Changement » explicite, des libellés cohérents avec l'historique des préfixes, et « Active » dans la dernière vue quand l'état est toujours observé.</p>
+      <div class="legend"><span class="badge reassuring">Nouveau</span><span class="badge watch">Retiré</span><span class="badge critical">Instable</span><span class="muted">même vocabulaire que les onglets Préfixes</span></div>
+    </section>
+  </div>
+</body>
+</html>

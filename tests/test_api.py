@@ -57,6 +57,26 @@ class TestSante:
         assert client.get("/api/openapi.json").status_code == 200
 
 
+class TestCleApi:
+    def test_cle_configuree_protege_toutes_les_routes(self, monkeypatch):
+        settings = get_settings()
+        monkeypatch.setattr(settings.api, "api_key", "secret-de-test")
+        client = TestClient(create_app())
+
+        assert client.get("/api/health").status_code == 401
+        assert client.get("/api/openapi.json").status_code == 401
+        assert client.get("/api/docs").status_code == 401
+
+        ok = client.get("/api/health", headers={"X-API-Key": "secret-de-test"})
+        assert ok.status_code == 200
+        assert client.get("/api/openapi.json", headers={"X-API-Key": "secret-de-test"}).status_code == 200
+
+    def test_cle_absente_laisse_le_service_local(self, monkeypatch):
+        monkeypatch.setattr(get_settings().api, "api_key", None)
+        client = TestClient(create_app())
+        assert client.get("/api/health").status_code == 200
+
+
 @requires_data
 class TestEvenements:
     def test_liste_paginee(self, client):

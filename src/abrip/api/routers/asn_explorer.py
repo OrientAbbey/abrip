@@ -23,10 +23,12 @@ from typing import Any
 
 import polars as pl
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
 
 from abrip.analytics.daily import ADJACENCY, PREFIX_ORIGIN, adjacency_sql, summary_is_current
 from abrip.api.deps import DataAccess, clamp_limit, get_data_access
 from abrip.api.schemas import Page, Series, TimePoint
+from abrip.reference.history import annotate_history, classify_presence, snapshot_dates
 from abrip.reference.irr import IrrValidator
 from abrip.reference.rpki import RpkiValidator
 
@@ -214,22 +216,19 @@ def country_prefix_table(
     )
 
 
-def _prefix_page(
+def _prefix_rows(
     data: DataAccess,
     kind: str,
     value: int | str,
     ip_version: str,
-    status: str,
     date_from: datetime | None,
     date_to: datetime | None,
-    limit: int,
-    offset: int,
-) -> Page[dict[str, Any]]:
-    limit = clamp_limit(limit)
+) -> list[dict[str, Any]]:
+    """Lignes (préfixe, origine, statut) sur la plage, avant filtre de statut."""
     scope = _origin_scope(data, kind, value)
     d0, d1 = _day_range(*_bounds(data, date_from, date_to))
     if scope is None:
-        return Page(items=[], total=0, limit=limit, offset=offset)
+        return []
     cond, param = scope
     if _use_summary(data, PREFIX_ORIGIN, d0, d1):
         source = f"""days AS (
@@ -261,23 +260,62 @@ def _prefix_page(
                 SELECT origin_asn, prefix, any_value(prefix_ip_version) AS ip_version,
                        min(day) AS first_seen, max(day) AS last_seen,
                        count(DISTINCT day) AS days_active,
+                       list(day ORDER BY day) AS seen_days,
                        bool_or(day = (SELECT d0 FROM span)) AS at_start,
                        bool_or(day = (SELECT d1 FROM span)) AS at_end
                 FROM days GROUP BY origin_asn, prefix
             )
-            SELECT p.*, date_diff('day', s.d0, s.d1) + 1 AS days_total,
-                   CASE
-                     WHEN NOT p.at_start AND p.at_end THEN 'new'
-                     WHEN p.at_start AND NOT p.at_end THEN 'left'
-                     WHEN p.at_start AND p.at_end AND p.days_active < date_diff('day', s.d0, s.d1) + 1
-                          THEN 'unstable'
-                     WHEN NOT p.at_start AND NOT p.at_end THEN 'unstable'
-                     ELSE 'stable'
-                   END AS status
+            SELECT p.*, date_diff('day', s.d0, s.d1) + 1 AS days_total
             FROM per_prefix p, span s
             ORDER BY p.prefix, p.origin_asn""",
         [param, d0, d1],
     )
+    if rows:
+        days = _data_days(data, d0, d1)
+        for row in rows:
+            row["status"] = classify_presence(row["seen_days"], days)
+    return rows
+
+
+class PrefixFacets(BaseModel):
+    """Comptes exacts par famille d'adresses et par statut, sur la plage choisie."""
+
+    ip_version: dict[str, int]
+    status: dict[str, int]
+
+
+def _prefix_facets(
+    data: DataAccess,
+    kind: str,
+    value: int | str,
+    date_from: datetime | None,
+    date_to: datetime | None,
+) -> PrefixFacets:
+    rows = _prefix_rows(data, kind, value, "all", date_from, date_to)
+    return PrefixFacets(
+        ip_version={
+            key: sum(1 for r in rows if str(r["ip_version"]) == key) for key in ("4", "6")
+        },
+        status={
+            key: sum(1 for r in rows if r["status"] == key)
+            for key in ("stable", "new", "left", "unstable")
+        },
+    )
+
+
+def _prefix_page(
+    data: DataAccess,
+    kind: str,
+    value: int | str,
+    ip_version: str,
+    status: str,
+    date_from: datetime | None,
+    date_to: datetime | None,
+    limit: int,
+    offset: int,
+) -> Page[dict[str, Any]]:
+    limit = clamp_limit(limit)
+    rows = _prefix_rows(data, kind, value, ip_version, date_from, date_to)
     if status != "all":
         rows = [r for r in rows if r["status"] == status]
     total = len(rows)
@@ -313,11 +351,40 @@ def _prefix_page(
     return Page(items=items, total=total, limit=limit, offset=offset)
 
 
+@router.get(
+    "/asns/{asn}/prefixes/facets",
+    response_model=PrefixFacets,
+    summary="Comptes des préfixes d'un AS par famille et par statut",
+)
+def asn_prefix_facets(
+    asn: int,
+    date_from: datetime | None = Query(None, alias="from"),
+    date_to: datetime | None = Query(None, alias="to"),
+    data: DataAccess = Depends(get_data_access),
+) -> PrefixFacets:
+    return _prefix_facets(data, "asn", asn, date_from, date_to)
+
+
+@router.get(
+    "/countries/{iso2}/prefixes/facets",
+    response_model=PrefixFacets,
+    summary="Comptes des préfixes d'un pays par famille et par statut",
+)
+def country_prefix_facets(
+    iso2: str,
+    date_from: datetime | None = Query(None, alias="from"),
+    date_to: datetime | None = Query(None, alias="to"),
+    data: DataAccess = Depends(get_data_access),
+) -> PrefixFacets:
+    return _prefix_facets(data, "country", iso2.upper(), date_from, date_to)
+
+
 def _history(
     data: DataAccess, table: str, columns: list[tuple[str, str]], prefix: str, asn: int
 ) -> list[dict[str, Any]]:
     """Regroupe les instantanés datés d'un référentiel en lignes « première /
-    dernière apparition ». ``columns`` est une liste ``(expression, alias)``.
+    dernière apparition », avec le changement classé (new/left/unstable/stable).
+    ``columns`` est une liste ``(expression, alias)``.
 
     Sans historique daté (aucune synchronisation encore faite), rend la table
     courante, en indiquant que la date n'est pas connue plutôt que d'inventer
@@ -329,18 +396,22 @@ def _history(
     """
     select = ", ".join(f"{expr} AS {alias}" for expr, alias in columns)
     group = ", ".join(expr for expr, _ in columns)
+    dates = snapshot_dates(data.settings.reference_dir, table)
     history_dir = data.settings.reference_dir / "history" / table
     files = sorted(history_dir.glob("date=*/*.parquet")) if history_dir.exists() else []
     if files:
         source = ", ".join(f"'{f}'" for f in files)
         rows = data.query(
-            f"""SELECT {select}, min(snapshot_date) AS first_seen, max(snapshot_date) AS last_seen
+            f"""SELECT {select},
+                       min(snapshot_date) AS first_seen, max(snapshot_date) AS last_seen,
+                       list(snapshot_date ORDER BY snapshot_date) AS seen_on
                 FROM read_parquet([{source}], union_by_name=true)
                 WHERE prefix = $1
                 GROUP BY {group}
                 ORDER BY first_seen""",
             [prefix],
         )
+        annotate_history(rows, dates)
     else:
         current = data.settings.reference_dir / table
         files = sorted(current.glob("*.parquet")) if current.exists() else []
@@ -353,6 +424,9 @@ def _history(
                 WHERE prefix = $1""",
             [prefix],
         )
+        for row in rows:
+            row["change"] = "unknown"
+            row["active"] = False
     for row in rows:
         row["match"] = int(row["origin"]) == asn
     return rows
@@ -694,20 +768,8 @@ def _data_days(data: DataAccess, d0: datetime, d1: datetime) -> list[date]:
 
 
 def _presence_status(present: set[date], days: list[date]) -> str:
-    """Même règle que le tableau des préfixes, sur les jours de collecte de la plage :
-    *new* (absent au premier jour, présent au dernier), *left* (l'inverse), *unstable*
-    (présent aux deux bouts avec au moins un jour d'absence, ou apparu et disparu à
-    l'intérieur de la plage), sinon *stable*."""
-    if not days:
-        return "stable"
-    at_start, at_end = days[0] in present, days[-1] in present
-    if not at_start and at_end:
-        return "new"
-    if at_start and not at_end:
-        return "left"
-    if at_start and at_end:
-        return "stable" if all(d in present for d in days) else "unstable"
-    return "unstable"
+    """Délègue à la règle unique, sans duplication SQL/Python."""
+    return classify_presence(present, days)
 
 
 def _add_statuses(

@@ -7,7 +7,7 @@
  *  bien le tableau.
  */
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useApi } from "../lib/useApi";
 import { rangeParams, type DateRange } from "./DateRangeSelector";
@@ -15,6 +15,7 @@ import type {
   HistoryResponse,
   Page,
   PrefixAnnouncementHistory,
+  PrefixFacets,
   PrefixRow,
   PrefixStatus,
   Series,
@@ -28,12 +29,6 @@ import { num } from "../lib/format";
 import { DayStrip, PeriodsTable } from "./PeriodsTable";
 
 type IpTab = "all" | "4" | "6";
-
-const IP_TABS: Array<TabOption<IpTab>> = [
-  { value: "all", label: "Tous" },
-  { value: "4", label: "IPv4" },
-  { value: "6", label: "IPv6" },
-];
 
 const STATUS_TABS: Array<TabOption<PrefixStatus | "all">> = [
   { value: "all", label: "Tous" },
@@ -53,6 +48,13 @@ const STATUS_TABS: Array<TabOption<PrefixStatus | "all">> = [
     title: "Préfixes apparus puis disparus plusieurs fois pendant la période sélectionnée",
   },
 ];
+
+const CHANGE_BADGE: Record<string, ReactNode> = {
+  new: <span className="badge reassuring">Nouveau</span>,
+  left: <span className="badge watch">Retiré</span>,
+  unstable: <span className="badge critical">Instable</span>,
+  stable: <span className="badge reassuring">Stable</span>,
+};
 
 const STATUS_LABEL: Record<PrefixStatus, string> = {
   stable: "stable", new: "new", left: "left", unstable: "unstable",
@@ -146,8 +148,9 @@ function HistoryModal({ asn, modal, onClose }: { asn: string; modal: NonNullable
                     <th>Origine</th>
                     {isRoa ? <th>Trust Anchor</th> : <th>Source</th>}
                     {isRoa && <th className="num">Longueur max.</th>}
-                    <th>Première observation (UTC)</th>
-                    <th>Dernière observation (UTC)</th>
+                    <th>Première vue</th>
+                    <th>Dernière vue</th>
+                    <th>Changement</th>
                     <th>Concordance</th>
                   </tr>
                 </thead>
@@ -159,7 +162,14 @@ function HistoryModal({ asn, modal, onClose }: { asn: string; modal: NonNullable
                       {isRoa ? <td>{row.trust_anchor}</td> : <td>{row.source}</td>}
                       {isRoa && <td className="num mono">/{row.max_length}</td>}
                       <td className="mono">{row.first_seen ?? "—"}</td>
-                      <td className="mono">{row.last_seen ?? "—"}</td>
+                      <td className="mono">
+                        {row.active ? (
+                          <span className="badge reassuring">Active</span>
+                        ) : (
+                          row.last_seen ?? "—"
+                        )}
+                      </td>
+                      <td>{CHANGE_BADGE[row.change ?? "unknown"] ?? <span className="muted">{row.change ?? "—"}</span>}</td>
                       <td>
                         <span className={row.match ? "badge reassuring" : "badge critical"}>
                           {row.match ? "concorde" : "discorde"}
@@ -174,9 +184,10 @@ function HistoryModal({ asn, modal, onClose }: { asn: string; modal: NonNullable
         }
       </AsyncBlock>
       <p className="card-note">
-        « Concordance » compare l'origine enregistrée à l'AS spécifié ci-dessus. Les dates sont celles des
-        instantanés de synchronisation : une ligne « — » signifie qu'aucun historique daté n'a
-        encore été collecté.
+        « Concordance » compare l'origine enregistrée à l'AS spécifié ci-dessus. « Changement » qualifie
+        l'état sur les instantanés de synchronisation : Nouveau, Retiré, Instable ou Stable. Les dates
+        sont celles des instantanés ; une ligne « — » signifie qu'aucun historique daté n'a encore été
+        collecté.
       </p>
     </Modal>
   );
@@ -200,11 +211,28 @@ export function PrefixExplorer({
   const [modal, setModal] = useState<ModalState>(null);
 
   const dates = rangeParams(range);
+  // Les compteurs viennent d'un seul appel : ils ne dépendent ni de l'onglet
+  // d'adresse, ni de celui de statut, ni de la page affichée.
+  const facets = useApi<PrefixFacets>(`${base}/prefixes/facets`, dates);
   const series = useApi<Series>(`${base}/prefixes/timeseries`, { ip_version: ipTab, ...dates });
   const table = useApi<Page<PrefixRow>>(`${base}/prefixes`, {
     ip_version: ipTab, status: status === "all" ? undefined : status,
     ...dates, limit: PAGE_SIZE, offset,
   });
+
+  const sum = (values: Record<string, number | undefined>): number | undefined =>
+    Object.values(values).reduce<number>((total, n) => total + (n ?? 0), 0);
+  const ipOptions: Array<TabOption<IpTab>> = [
+    { value: "all", label: "Tous", count: facets.data ? sum(facets.data.ip_version) : undefined },
+    { value: "4", label: "IPv4", count: facets.data?.ip_version["4"] },
+    { value: "6", label: "IPv6", count: facets.data?.ip_version["6"] },
+  ];
+  const statusOptions: Array<TabOption<PrefixStatus | "all">> = STATUS_TABS.map((option) => ({
+    ...option,
+    count: option.value === "all"
+      ? (facets.data ? sum(facets.data.status) : undefined)
+      : facets.data?.status[option.value],
+  }));
 
   const changeIp = (v: IpTab) => { setIpTab(v); setOffset(0); };
   const changeStatus = (v: PrefixStatus | "all") => { setStatus(v); setOffset(0); };
@@ -212,7 +240,7 @@ export function PrefixExplorer({
   return (
     <section className="card">
       <h2>Préfixes</h2>
-      <Tabs options={IP_TABS} value={ipTab} onChange={changeIp} label="Famille d'adresses" />
+      <Tabs options={ipOptions} value={ipTab} onChange={changeIp} label="Famille d'adresses" />
       <AsyncBlock state={series} rows={3}>
         {(data) => (
           <TimeChart
@@ -232,7 +260,7 @@ export function PrefixExplorer({
         )}
       </AsyncBlock>
 
-      <Tabs options={STATUS_TABS} value={status} onChange={changeStatus} label="Évolution des préfixes" />
+      <Tabs options={statusOptions} value={status} onChange={changeStatus} label="Évolution des préfixes" />
       <AsyncBlock state={table} rows={4}>
         {(page) =>
           page.items.length === 0 ? (

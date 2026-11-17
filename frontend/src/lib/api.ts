@@ -10,6 +10,27 @@
 import type { ApiErrorBody } from "./types";
 
 const BASE = "/api";
+const API_KEY_STORAGE = "abrip_api_key";
+
+/** Clé API optionnelle, conservée dans le navigateur pour les déploiements
+ *  qui activent `api.api_key` côté serveur. Stockage best-effort : en mode
+ *  privé ou hors navigateur, la clé reste simplement vide. */
+export function getApiKey(): string | null {
+  try {
+    return globalThis.localStorage?.getItem(API_KEY_STORAGE) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export function setApiKey(key: string): void {
+  try {
+    if (key) globalThis.localStorage?.setItem(API_KEY_STORAGE, key);
+    else globalThis.localStorage?.removeItem(API_KEY_STORAGE);
+  } catch {
+    /* navigateur sans stockage : la clé ne peut pas être mémorisée */
+  }
+}
 
 export class ApiError extends Error {
   readonly status: number;
@@ -54,9 +75,13 @@ export async function apiGet<T>(
 ): Promise<T> {
   let response: Response;
   try {
+    const key = getApiKey();
     response = await fetch(`${BASE}${path}${buildQuery(params)}`, {
       signal,
-      headers: { Accept: "application/json" },
+      headers: {
+        Accept: "application/json",
+        ...(key ? { "X-API-Key": key } : {}),
+      },
     });
   } catch (cause) {
     if ((cause as Error).name === "AbortError") throw cause;
@@ -78,6 +103,13 @@ export async function apiGet<T>(
       if (payload?.error) body = payload.error as ApiErrorBody;
     } catch {
       /* réponse non JSON : on garde le message générique */
+    }
+    if (response.status === 401 || response.status === 403) {
+      body = {
+        code: "unauthorized",
+        message: "Clé API absente ou invalide — renseignez-la dans la page À propos.",
+        details: body.details,
+      };
     }
     throw new ApiError(response.status, body);
   }

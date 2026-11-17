@@ -10,6 +10,7 @@ import polars as pl
 import pytest
 
 from abrip.models import Relationship, RpkiStatus
+from abrip.reference.history import classify_presence
 from abrip.reference.relationships import (
     RelationshipIndex,
     classify_path,
@@ -80,6 +81,33 @@ def index() -> RelationshipIndex:
         }
     )
     return RelationshipIndex(frame)
+
+
+class TestClassificationPresence:
+    """Une seule règle pour les badges et les compteurs, sur les jours de collecte."""
+
+    DAYS = ("2026-08-24", "2026-08-25", "2026-08-26", "2026-08-27")
+
+    @pytest.mark.parametrize(
+        "seen,expected",
+        [
+            (DAYS, "stable"),
+            (DAYS[1:], "new"),
+            (DAYS[:-1], "left"),
+            ([DAYS[0], DAYS[2], DAYS[3]], "unstable"),
+            ([DAYS[1]], "unstable"),
+            ([], "unstable"),
+        ],
+    )
+    def test_classification(self, seen, expected):
+        assert classify_presence(seen, self.DAYS) == expected
+
+    def test_jours_sans_collecte_ne_comptent_pas_comme_absence(self):
+        # Un trou de collecte n'est pas une absence de l'entité.
+        assert classify_presence([self.DAYS[0], self.DAYS[2], self.DAYS[3]], [self.DAYS[0], self.DAYS[2], self.DAYS[3]]) == "stable"
+
+    def test_plage_vide(self):
+        assert classify_presence([], []) == "stable"
 
 
 class TestValleyFree:

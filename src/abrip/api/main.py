@@ -11,13 +11,14 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from abrip import __version__
+from abrip.api.deps import verify_api_key
 from abrip.api.routers import asn_explorer, events, explore, metrics, propagation, system
 from abrip.config import Settings, get_settings
 from abrip.logging_conf import get_logger, setup_logging
@@ -58,6 +59,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         docs_url="/api/docs",
         redoc_url=None,
         openapi_url="/api/openapi.json",
+        # Une seule porte d'entrée : la clé, quand elle est configurée, protège
+        # aussi /api/docs et /api/openapi.json, pas seulement les routeurs.
+        dependencies=[Depends(verify_api_key)],
     )
 
     if settings.api.cors_origins:
@@ -68,6 +72,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             allow_methods=["GET", "OPTIONS"],
             allow_headers=["*"],
         )
+
+    # Les routes de documentation sont créées par FastAPI en dehors des
+    # routeurs : les dépendances globales ne s'y appliquent pas. On les protège
+    # donc explicitement quand une clé est configurée.
+    @app.middleware("http")
+    async def protect_docs(request: Request, call_next):
+        expected = settings.api.api_key
+        if (
+            expected
+            and request.url.path in {"/api/docs", "/api/openapi.json", "/api/redoc"}
+            and request.headers.get("x-api-key") != expected
+        ):
+            return _error(401, "unauthorized", "Clé API absente ou invalide.")
+        return await call_next(request)
 
     for router in (
         system.router,
