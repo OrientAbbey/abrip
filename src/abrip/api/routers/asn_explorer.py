@@ -28,6 +28,7 @@ from pydantic import BaseModel
 from abrip.analytics.daily import ADJACENCY, PREFIX_ORIGIN, adjacency_sql, summary_is_current
 from abrip.api.deps import DataAccess, clamp_limit, get_data_access
 from abrip.api.schemas import Page, Series, TimePoint
+from abrip.reference.history import classify_presence
 from abrip.reference.irr import IrrValidator
 from abrip.reference.rpki import RpkiValidator
 
@@ -253,29 +254,27 @@ def _prefix_rows(
                 FROM {data.table("bgp_elements")}
                 WHERE ts >= $2 AND ts < $3 + INTERVAL 1 DAY
             ),"""
-    return data.query(
+    rows = data.query(
         f"""WITH {source}
             per_prefix AS (
                 SELECT origin_asn, prefix, any_value(prefix_ip_version) AS ip_version,
                        min(day) AS first_seen, max(day) AS last_seen,
                        count(DISTINCT day) AS days_active,
+                       list(day ORDER BY day) AS seen_days,
                        bool_or(day = (SELECT d0 FROM span)) AS at_start,
                        bool_or(day = (SELECT d1 FROM span)) AS at_end
                 FROM days GROUP BY origin_asn, prefix
             )
-            SELECT p.*, date_diff('day', s.d0, s.d1) + 1 AS days_total,
-                   CASE
-                     WHEN NOT p.at_start AND p.at_end THEN 'new'
-                     WHEN p.at_start AND NOT p.at_end THEN 'left'
-                     WHEN p.at_start AND p.at_end AND p.days_active < date_diff('day', s.d0, s.d1) + 1
-                          THEN 'unstable'
-                     WHEN NOT p.at_start AND NOT p.at_end THEN 'unstable'
-                     ELSE 'stable'
-                   END AS status
+            SELECT p.*, date_diff('day', s.d0, s.d1) + 1 AS days_total
             FROM per_prefix p, span s
             ORDER BY p.prefix, p.origin_asn""",
         [param, d0, d1],
     )
+    if rows:
+        days = _data_days(data, d0, d1)
+        for row in rows:
+            row["status"] = classify_presence(row["seen_days"], days)
+    return rows
 
 
 class PrefixFacets(BaseModel):
@@ -761,20 +760,8 @@ def _data_days(data: DataAccess, d0: datetime, d1: datetime) -> list[date]:
 
 
 def _presence_status(present: set[date], days: list[date]) -> str:
-    """Même règle que le tableau des préfixes, sur les jours de collecte de la plage :
-    *new* (absent au premier jour, présent au dernier), *left* (l'inverse), *unstable*
-    (présent aux deux bouts avec au moins un jour d'absence, ou apparu et disparu à
-    l'intérieur de la plage), sinon *stable*."""
-    if not days:
-        return "stable"
-    at_start, at_end = days[0] in present, days[-1] in present
-    if not at_start and at_end:
-        return "new"
-    if at_start and not at_end:
-        return "left"
-    if at_start and at_end:
-        return "stable" if all(d in present for d in days) else "unstable"
-    return "unstable"
+    """Délègue à la règle unique, sans duplication SQL/Python."""
+    return classify_presence(present, days)
 
 
 def _add_statuses(
