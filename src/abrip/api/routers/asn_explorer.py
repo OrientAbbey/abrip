@@ -23,6 +23,7 @@ from typing import Any
 
 import polars as pl
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
 
 from abrip.analytics.daily import ADJACENCY, PREFIX_ORIGIN, adjacency_sql, summary_is_current
 from abrip.api.deps import DataAccess, clamp_limit, get_data_access
@@ -214,22 +215,19 @@ def country_prefix_table(
     )
 
 
-def _prefix_page(
+def _prefix_rows(
     data: DataAccess,
     kind: str,
     value: int | str,
     ip_version: str,
-    status: str,
     date_from: datetime | None,
     date_to: datetime | None,
-    limit: int,
-    offset: int,
-) -> Page[dict[str, Any]]:
-    limit = clamp_limit(limit)
+) -> list[dict[str, Any]]:
+    """Lignes (préfixe, origine, statut) sur la plage, avant filtre de statut."""
     scope = _origin_scope(data, kind, value)
     d0, d1 = _day_range(*_bounds(data, date_from, date_to))
     if scope is None:
-        return Page(items=[], total=0, limit=limit, offset=offset)
+        return []
     cond, param = scope
     if _use_summary(data, PREFIX_ORIGIN, d0, d1):
         source = f"""days AS (
@@ -255,7 +253,7 @@ def _prefix_page(
                 FROM {data.table("bgp_elements")}
                 WHERE ts >= $2 AND ts < $3 + INTERVAL 1 DAY
             ),"""
-    rows = data.query(
+    return data.query(
         f"""WITH {source}
             per_prefix AS (
                 SELECT origin_asn, prefix, any_value(prefix_ip_version) AS ip_version,
@@ -278,6 +276,47 @@ def _prefix_page(
             ORDER BY p.prefix, p.origin_asn""",
         [param, d0, d1],
     )
+
+
+class PrefixFacets(BaseModel):
+    """Comptes exacts par famille d'adresses et par statut, sur la plage choisie."""
+
+    ip_version: dict[str, int]
+    status: dict[str, int]
+
+
+def _prefix_facets(
+    data: DataAccess,
+    kind: str,
+    value: int | str,
+    date_from: datetime | None,
+    date_to: datetime | None,
+) -> PrefixFacets:
+    rows = _prefix_rows(data, kind, value, "all", date_from, date_to)
+    return PrefixFacets(
+        ip_version={
+            key: sum(1 for r in rows if str(r["ip_version"]) == key) for key in ("4", "6")
+        },
+        status={
+            key: sum(1 for r in rows if r["status"] == key)
+            for key in ("stable", "new", "left", "unstable")
+        },
+    )
+
+
+def _prefix_page(
+    data: DataAccess,
+    kind: str,
+    value: int | str,
+    ip_version: str,
+    status: str,
+    date_from: datetime | None,
+    date_to: datetime | None,
+    limit: int,
+    offset: int,
+) -> Page[dict[str, Any]]:
+    limit = clamp_limit(limit)
+    rows = _prefix_rows(data, kind, value, ip_version, date_from, date_to)
     if status != "all":
         rows = [r for r in rows if r["status"] == status]
     total = len(rows)
@@ -311,6 +350,34 @@ def _prefix_page(
             }
         )
     return Page(items=items, total=total, limit=limit, offset=offset)
+
+
+@router.get(
+    "/asns/{asn}/prefixes/facets",
+    response_model=PrefixFacets,
+    summary="Comptes des préfixes d'un AS par famille et par statut",
+)
+def asn_prefix_facets(
+    asn: int,
+    date_from: datetime | None = Query(None, alias="from"),
+    date_to: datetime | None = Query(None, alias="to"),
+    data: DataAccess = Depends(get_data_access),
+) -> PrefixFacets:
+    return _prefix_facets(data, "asn", asn, date_from, date_to)
+
+
+@router.get(
+    "/countries/{iso2}/prefixes/facets",
+    response_model=PrefixFacets,
+    summary="Comptes des préfixes d'un pays par famille et par statut",
+)
+def country_prefix_facets(
+    iso2: str,
+    date_from: datetime | None = Query(None, alias="from"),
+    date_to: datetime | None = Query(None, alias="to"),
+    data: DataAccess = Depends(get_data_access),
+) -> PrefixFacets:
+    return _prefix_facets(data, "country", iso2.upper(), date_from, date_to)
 
 
 def _history(

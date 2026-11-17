@@ -15,6 +15,7 @@ import type {
   HistoryResponse,
   Page,
   PrefixAnnouncementHistory,
+  PrefixFacets,
   PrefixRow,
   PrefixStatus,
   Series,
@@ -28,12 +29,6 @@ import { num } from "../lib/format";
 import { DayStrip, PeriodsTable } from "./PeriodsTable";
 
 type IpTab = "all" | "4" | "6";
-
-const IP_TABS: Array<TabOption<IpTab>> = [
-  { value: "all", label: "Tous" },
-  { value: "4", label: "IPv4" },
-  { value: "6", label: "IPv6" },
-];
 
 const STATUS_TABS: Array<TabOption<PrefixStatus | "all">> = [
   { value: "all", label: "Tous" },
@@ -200,11 +195,28 @@ export function PrefixExplorer({
   const [modal, setModal] = useState<ModalState>(null);
 
   const dates = rangeParams(range);
+  // Les compteurs viennent d'un seul appel : ils ne dépendent ni de l'onglet
+  // d'adresse, ni de celui de statut, ni de la page affichée.
+  const facets = useApi<PrefixFacets>(`${base}/prefixes/facets`, dates);
   const series = useApi<Series>(`${base}/prefixes/timeseries`, { ip_version: ipTab, ...dates });
   const table = useApi<Page<PrefixRow>>(`${base}/prefixes`, {
     ip_version: ipTab, status: status === "all" ? undefined : status,
     ...dates, limit: PAGE_SIZE, offset,
   });
+
+  const sum = (values: Record<string, number | undefined>): number | undefined =>
+    Object.values(values).reduce<number>((total, n) => total + (n ?? 0), 0);
+  const ipOptions: Array<TabOption<IpTab>> = [
+    { value: "all", label: "Tous", count: facets.data ? sum(facets.data.ip_version) : undefined },
+    { value: "4", label: "IPv4", count: facets.data?.ip_version["4"] },
+    { value: "6", label: "IPv6", count: facets.data?.ip_version["6"] },
+  ];
+  const statusOptions: Array<TabOption<PrefixStatus | "all">> = STATUS_TABS.map((option) => ({
+    ...option,
+    count: option.value === "all"
+      ? (facets.data ? sum(facets.data.status) : undefined)
+      : facets.data?.status[option.value],
+  }));
 
   const changeIp = (v: IpTab) => { setIpTab(v); setOffset(0); };
   const changeStatus = (v: PrefixStatus | "all") => { setStatus(v); setOffset(0); };
@@ -212,7 +224,7 @@ export function PrefixExplorer({
   return (
     <section className="card">
       <h2>Préfixes</h2>
-      <Tabs options={IP_TABS} value={ipTab} onChange={changeIp} label="Famille d'adresses" />
+      <Tabs options={ipOptions} value={ipTab} onChange={changeIp} label="Famille d'adresses" />
       <AsyncBlock state={series} rows={3}>
         {(data) => (
           <TimeChart
@@ -232,7 +244,7 @@ export function PrefixExplorer({
         )}
       </AsyncBlock>
 
-      <Tabs options={STATUS_TABS} value={status} onChange={changeStatus} label="Évolution des préfixes" />
+      <Tabs options={statusOptions} value={status} onChange={changeStatus} label="Évolution des préfixes" />
       <AsyncBlock state={table} rows={4}>
         {(page) =>
           page.items.length === 0 ? (

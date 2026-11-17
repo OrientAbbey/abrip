@@ -90,6 +90,17 @@ class TestPrefixesDuPays:
             tables, direct = _par(client, monkeypatch, chemin, ip_version=version, **plage)
             assert tables == direct, chemin
 
+    def test_facets_comptent_les_prefixes_du_pays(self, client):
+        facets = client.get("/api/countries/CM/prefixes/facets").json()
+        items = client.get("/api/countries/CM/prefixes", params={"limit": 500}).json()["items"]
+        assert facets["ip_version"] == {
+            key: sum(1 for i in items if str(i["ip_version"]) == key) for key in ("4", "6")
+        }
+        assert facets["status"] == {
+            key: sum(1 for i in items if i["status"] == key)
+            for key in ("stable", "new", "left", "unstable")
+        }
+
     def test_serie_bornee_par_la_somme_des_membres(self, client):
         pays = client.get("/api/countries/CM/prefixes/timeseries").json()["points"]
         par_as = [

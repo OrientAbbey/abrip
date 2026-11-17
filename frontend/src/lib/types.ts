@@ -196,6 +196,12 @@ export interface HistoryRow {
   match: boolean;
 }
 
+/** Comptes exacts renvoyés par `/prefixes/facets`, indépendamment des filtres actifs. */
+export interface PrefixFacets {
+  ip_version: Record<string, number>;
+  status: Record<PrefixStatus, number>;
+}
+
 export interface HistoryResponse {
   prefix: string;
   specified_asn: number;
