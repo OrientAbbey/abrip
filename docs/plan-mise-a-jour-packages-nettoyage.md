@@ -21,7 +21,7 @@
 - [x] **4. Mettre à jour le frontend** — `recharts` 3.11.0 a été essayé puis **rejeté** : il fait passer le chunk `charts` de 122 → 136 Ko gzip et le total CI à 259 569 octets, au-delà du budget de 256 000. Retour à 3.10.1 (245 739 octets = 240 Ko) ; `package-lock.json` reste donc inchangé. `npm run typecheck` et `npm run build` réussis.
 - [x] **5. Nettoyer prudemment** — caches régénérables supprimés (`.mypy_cache`, `.pytest_cache`, `.ruff_cache`, `frontend/tsconfig.tsbuildinfo`) ; `data/`, `.venv/`, `node_modules/`, `dist/` et `src/abrip.egg-info/` laissés en place. Documentation corrigée : README « Python 3.11+ » → « 3.12+ » et note `uv sync`. `ruff format` appliqué aux 7 fichiers qui n'étaient pas conformes à la version 0.17.5 (formatage seul).
 - [x] **6. Vérifier** — Ruff (lint + format), Mypy, `pytest` complet, `demo verify`, typecheck/build frontend, budget gzip mesuré comme la CI, `pip check`, `uv lock --check` : tout passe.
-- [x] **7. Revue et clôture** — diff relu, état Git et versions finales vérifiés, suivi mis à jour. Reste à commiter/pousser/ouvrir la PR sur confirmation.
+- [x] **7. Revue et clôture** — diff relu, état Git et versions finales vérifiés, suivi mis à jour. Le job Python de CI utilise maintenant `uv sync --locked --all-extras` et `uv run --locked` afin que CI et développement consomment le même verrou. Commit, push et PR autorisés par confirmation.
 
 ## Critères de fin
 
@@ -42,4 +42,4 @@
 | 4 | recharts 3.11.0 testé : chunk `charts` 136 Ko gzip, total 259 569 octets > 256 000 → **revert à 3.10.1**. Mesure finale identique à la CI (`gzip -c` par fichier, octets bruts) : **245 739 octets = 240,0 Ko**, marge 10 261 octets. Aucun changement frontend conservé. |
 | 5 | Caches supprimés ; README (Python 3.12+, note `uv sync`) ; `ruff format` sur 7 fichiers non conformes. |
 | 6 | `ruff check` : All checks passed ; `ruff format --check` : 79 fichiers conformes ; `mypy src` : 51 fichiers sans erreur ; `demo verify` : 5/5, recall 1.0 ; `pytest -q` : **728 passed** en 25 min 28 s ; `pip check` propre ; `npm run typecheck` et `npm run build` OK ; `uv lock --check` : 55 paquets cohérents. |
-| 7 | Diff relu : 7 fichiers modifiés + `uv.lock` et ce plan ajoutés ; aucun fichier source/donnée supprimé. Commit/push/PR en attente de confirmation. |
+| 7 | Revue du diff et des versions finales ; job Python CI basculé vers `uv --locked` pour utiliser effectivement `uv.lock`. Aucun fichier source/donnée supprimé. Commits séparés par doc, dépendances, formatage et CI ; push/PR autorisés par l’utilisateur. |
