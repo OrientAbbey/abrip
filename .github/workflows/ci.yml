@@ -15,27 +15,30 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: pip
 
-      - name: Installer le projet
-        run: pip install -e ".[dev]"
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Installer le projet depuis le verrou
+        run: uv sync --locked --all-extras
 
       - name: Linter
-        run: ruff check src tests
+        run: uv run --locked ruff check src tests
 
       - name: Vérification de types
-        run: mypy src
+        run: uv run --locked mypy src
 
       # Le pipeline tourne avant les tests : les tests de non-régression
       # travaillent sur des données réellement produites, pas simulées.
       - name: Générer le jeu de démonstration
-        run: abrip demo bootstrap
+        run: uv run --locked abrip demo bootstrap
 
       - name: Vérifier le rappel sur la vérité terrain
-        run: abrip demo verify
+        run: uv run --locked abrip demo verify
 
       - name: Tests
-        run: pytest -q
+        run: uv run --locked pytest -q
 
   frontend:
     name: Compilation du frontend

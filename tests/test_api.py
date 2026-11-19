@@ -69,7 +69,10 @@ class TestCleApi:
 
         ok = client.get("/api/health", headers={"X-API-Key": "secret-de-test"})
         assert ok.status_code == 200
-        assert client.get("/api/openapi.json", headers={"X-API-Key": "secret-de-test"}).status_code == 200
+        assert (
+            client.get("/api/openapi.json", headers={"X-API-Key": "secret-de-test"}).status_code
+            == 200
+        )
 
     def test_cle_absente_laisse_le_service_local(self, monkeypatch):
         monkeypatch.setattr(get_settings().api, "api_key", None)

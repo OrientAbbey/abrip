@@ -11,8 +11,10 @@ Le projet répond à une question simple et peu outillée : *quand un préfixe a
 Aucune donnée à télécharger : un générateur produit un jeu de démonstration avec des anomalies plantées, ce qui permet de voir la plateforme fonctionner avant de la brancher sur les archives réelles.
 
 ```bash
-# 1. Installation (Python 3.11+)
+# 1. Installation (Python 3.12+)
 pip install -e ".[dev]"
+#    ou, reproductible (installe strictement les versions de uv.lock) :
+# uv sync --locked --all-extras
 
 # 2. Jeu de démonstration : 7 jours de données, référentiels, métriques, détection
 abrip demo bootstrap
