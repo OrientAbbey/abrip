@@ -293,9 +293,7 @@ def _prefix_facets(
 ) -> PrefixFacets:
     rows = _prefix_rows(data, kind, value, "all", date_from, date_to)
     return PrefixFacets(
-        ip_version={
-            key: sum(1 for r in rows if str(r["ip_version"]) == key) for key in ("4", "6")
-        },
+        ip_version={key: sum(1 for r in rows if str(r["ip_version"]) == key) for key in ("4", "6")},
         status={
             key: sum(1 for r in rows if r["status"] == key)
             for key in ("stable", "new", "left", "unstable")

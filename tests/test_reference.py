@@ -104,7 +104,13 @@ class TestClassificationPresence:
 
     def test_jours_sans_collecte_ne_comptent_pas_comme_absence(self):
         # Un trou de collecte n'est pas une absence de l'entité.
-        assert classify_presence([self.DAYS[0], self.DAYS[2], self.DAYS[3]], [self.DAYS[0], self.DAYS[2], self.DAYS[3]]) == "stable"
+        assert (
+            classify_presence(
+                [self.DAYS[0], self.DAYS[2], self.DAYS[3]],
+                [self.DAYS[0], self.DAYS[2], self.DAYS[3]],
+            )
+            == "stable"
+        )
 
     def test_plage_vide(self):
         assert classify_presence([], []) == "stable"

@@ -88,9 +88,7 @@ def snapshot_dates(reference_dir: Path, table: str) -> list[str]:
     )
 
 
-def annotate_history(
-    rows: list[dict[str, Any]], dates: list[str]
-) -> list[dict[str, Any]]:
+def annotate_history(rows: list[dict[str, Any]], dates: list[str]) -> list[dict[str, Any]]:
     """Ajoute ``change`` et ``active`` à des lignes d'historique.
 
     Chaque ligne doit porter ``seen_on`` (liste des dates d'instantané où
