@@ -26,6 +26,7 @@ def test_schemas_exposes_dans_openapi(client):
     assert "IncidentOut" in schemas
     assert "CountryRelationships" in schemas
     assert "AsnNames" in schemas
+    assert {"PrefixRow", "NeighboursResponse", "RoaHistoryResponse", "PeriodRun"} <= set(schemas)
     assert set(schemas["EventFacets"]["properties"]) == {
         "detector",
         "severity",
@@ -89,3 +90,68 @@ class TestContratAvecDonnees:
                 assert set(relation) == {"asn", "country_iso2", "local_asns"}
                 assert isinstance(relation["asn"], int)
                 assert all(isinstance(asn, int) for asn in relation["local_asns"])
+
+    def test_lignes_de_prefixes_ont_des_dates_utc(self, client):
+        body = client.get("/api/asns/37300/prefixes").json()
+        assert body["items"]
+        expected = {
+            "prefix",
+            "origin_asn",
+            "ip_version",
+            "active",
+            "status",
+            "first_seen",
+            "last_seen",
+            "days_active",
+            "days_total",
+            "rpki_status",
+            "irr_status",
+        }
+        for item in body["items"]:
+            assert set(item) == expected
+            assert item["first_seen"].endswith("Z")
+            assert item["last_seen"].endswith("Z")
+
+    def test_voisins_ont_le_schéma_complet_sans_champ_de_pays(self, client):
+        body = client.get("/api/asns/37100/neighbours").json()
+        assert body["items"]
+        assert set(body) == {"asn", "days", "counts", "status_counts", "items"}
+        assert set(body["items"][0]) == {
+            "asn",
+            "type",
+            "ipv4",
+            "ipv6",
+            "first_seen",
+            "last_seen",
+            "history",
+            "active_now",
+            "status",
+            "country_iso2",
+        }
+        assert body["items"][0]["first_seen"].endswith("Z")
+        pays = client.get("/api/countries/CM/neighbours").json()
+        if pays["items"]:
+            assert "member_asn" in pays["items"][0]
+
+    def test_historiques_gardent_leurs_champs_specifiques(self, client):
+        roa = client.get("/api/asns/37200/prefixes/196.216.32.0/20/roa-history").json()
+        if roa["rows"]:
+            assert {"trust_anchor", "max_length"} <= set(roa["rows"][0])
+            assert "source" not in roa["rows"][0]
+        irr = client.get("/api/asns/37400/prefixes/196.60.0.0/18/route-history").json()
+        if irr["rows"]:
+            assert "source" in irr["rows"][0]
+            assert "max_length" not in irr["rows"][0]
+
+    def test_periodes_avec_et_sans_observations(self, client):
+        prefix = client.get("/api/asns/37100/prefixes/102.22.8.0%2F22/history").json()
+        if prefix["items"]:
+            assert {"first_seen", "last_seen", "days", "observations", "active"} == set(
+                prefix["items"][0]
+            )
+        neighbours = client.get("/api/asns/37100/neighbours/4809/history").json()
+        for family in ("ipv4", "ipv6"):
+            for run in neighbours[family]:
+                assert "observations" not in run
+                assert set(run) == {"first_seen", "last_seen", "days", "active"}
+        assert all(set(day) == {"day", "ipv4", "ipv6"} for day in neighbours["daily"])

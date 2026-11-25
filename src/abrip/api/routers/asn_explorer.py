@@ -23,11 +23,32 @@ from typing import Any
 
 import polars as pl
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel
 
 from abrip.analytics.daily import ADJACENCY, PREFIX_ORIGIN, adjacency_sql, summary_is_current
 from abrip.api.deps import DataAccess, clamp_limit, get_data_access
-from abrip.api.schemas import CountryRelation, CountryRelationships, Page, Series, TimePoint
+from abrip.api.schemas import (
+    CountryNeighbourRow,
+    CountryNeighboursResponse,
+    CountryRelation,
+    CountryRelationships,
+    DailyObservation,
+    DailyPresence,
+    NeighbourHistoryResponse,
+    NeighbourRow,
+    NeighboursResponse,
+    Page,
+    PeriodPresence,
+    PeriodRun,
+    PrefixFacets,
+    PrefixHistoryResponse,
+    PrefixRow,
+    RoaHistoryResponse,
+    RoaHistoryRow,
+    RouteHistoryResponse,
+    RouteHistoryRow,
+    Series,
+    TimePoint,
+)
 from abrip.reference.history import annotate_history, classify_presence, snapshot_dates
 from abrip.reference.irr import IrrValidator
 from abrip.reference.rpki import RpkiValidator
@@ -171,7 +192,11 @@ def country_prefix_series(
     return _prefix_series(data, "country", iso2, iso2.upper(), ip_version, date_from, date_to)
 
 
-@router.get("/asns/{asn}/prefixes", summary="Préfixes d'un AS sur une plage de dates")
+@router.get(
+    "/asns/{asn}/prefixes",
+    response_model=Page[PrefixRow],
+    summary="Préfixes d'un AS sur une plage de dates",
+)
 def prefix_table(
     asn: int,
     ip_version: str = Query("all", pattern="^(all|4|6)$"),
@@ -181,7 +206,7 @@ def prefix_table(
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
     data: DataAccess = Depends(get_data_access),
-) -> Page[dict[str, Any]]:
+) -> Page[PrefixRow]:
     """Classement New / Left / Unstable d'un préfixe sur la plage choisie.
 
     Règle, volontairement simple et lisible plutôt qu'exhaustive :
@@ -197,6 +222,7 @@ def prefix_table(
 
 @router.get(
     "/countries/{iso2}/prefixes",
+    response_model=Page[PrefixRow],
     summary="Préfixes originés par les AS d'un pays, par plage de dates",
 )
 def country_prefix_table(
@@ -208,7 +234,7 @@ def country_prefix_table(
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
     data: DataAccess = Depends(get_data_access),
-) -> Page[dict[str, Any]]:
+) -> Page[PrefixRow]:
     """Même classement que pour un AS, par couple (AS membre, préfixe) : chaque ligne
     porte `origin_asn`, l'AS du pays qui annonce le préfixe."""
     return _prefix_page(
@@ -277,13 +303,6 @@ def _prefix_rows(
     return rows
 
 
-class PrefixFacets(BaseModel):
-    """Comptes exacts par famille d'adresses et par statut, sur la plage choisie."""
-
-    ip_version: dict[str, int]
-    status: dict[str, int]
-
-
 def _prefix_facets(
     data: DataAccess,
     kind: str,
@@ -311,7 +330,7 @@ def _prefix_page(
     date_to: datetime | None,
     limit: int,
     offset: int,
-) -> Page[dict[str, Any]]:
+) -> Page[PrefixRow]:
     limit = clamp_limit(limit)
     rows = _prefix_rows(data, kind, value, ip_version, date_from, date_to)
     if status != "all":
@@ -324,27 +343,27 @@ def _prefix_page(
     rpki = RpkiValidator.from_frame(roa_frame) if not roa_frame.is_empty() else None
     irr = IrrValidator.from_frame(irr_frame) if not irr_frame.is_empty() else None
 
-    items: list[dict[str, Any]] = []
+    items: list[PrefixRow] = []
     for r in page_rows:
         prefix = r["prefix"]
         items.append(
-            {
-                "prefix": prefix,
-                "origin_asn": int(r["origin_asn"]),
-                "ip_version": int(r["ip_version"]),
-                "active": bool(r["at_end"]),
-                "status": r["status"],
-                "first_seen": r["first_seen"],
-                "last_seen": r["last_seen"],
-                "days_active": int(r["days_active"]),
-                "days_total": int(r["days_total"]),
-                "rpki_status": rpki.validate(prefix, int(r["origin_asn"])).value
+            PrefixRow(
+                prefix=prefix,
+                origin_asn=int(r["origin_asn"]),
+                ip_version=int(r["ip_version"]),
+                active=bool(r["at_end"]),
+                status=r["status"],
+                first_seen=r["first_seen"],
+                last_seen=r["last_seen"],
+                days_active=int(r["days_active"]),
+                days_total=int(r["days_total"]),
+                rpki_status=rpki.validate(prefix, int(r["origin_asn"])).value
                 if rpki
                 else "not-found",
-                "irr_status": irr.validate(prefix, int(r["origin_asn"])).value
+                irr_status=irr.validate(prefix, int(r["origin_asn"])).value
                 if irr
                 else "irr_absent",
-            }
+            )
         )
     return Page(items=items, total=total, limit=limit, offset=offset)
 
@@ -432,11 +451,12 @@ def _history(
 
 @router.get(
     "/asns/{asn}/prefixes/{prefix:path}/roa-history",
+    response_model=RoaHistoryResponse,
     summary="Historique des ROA RPKI d'un préfixe",
 )
 def roa_history(
     asn: int, prefix: str, data: DataAccess = Depends(get_data_access)
-) -> dict[str, Any]:
+) -> RoaHistoryResponse:
     rows = _history(
         data,
         "ref_roa",
@@ -449,16 +469,19 @@ def roa_history(
         prefix,
         asn,
     )
-    return {"prefix": prefix, "specified_asn": asn, "rows": rows}
+    return RoaHistoryResponse(
+        prefix=prefix, specified_asn=asn, rows=[RoaHistoryRow(**row) for row in rows]
+    )
 
 
 @router.get(
     "/asns/{asn}/prefixes/{prefix:path}/route-history",
+    response_model=RouteHistoryResponse,
     summary="Historique des objets route IRR d'un préfixe",
 )
 def route_object_history(
     asn: int, prefix: str, data: DataAccess = Depends(get_data_access)
-) -> dict[str, Any]:
+) -> RouteHistoryResponse:
     rows = _history(
         data,
         "ref_irr_route",
@@ -466,7 +489,9 @@ def route_object_history(
         prefix,
         asn,
     )
-    return {"prefix": prefix, "specified_asn": asn, "rows": rows}
+    return RouteHistoryResponse(
+        prefix=prefix, specified_asn=asn, rows=[RouteHistoryRow(**row) for row in rows]
+    )
 
 
 # --- 6.2 : voisins BGP ------------------------------------------------------
@@ -534,14 +559,18 @@ def _neighbour_sql(data: DataAccess, summary: bool) -> str:
     return "WITH" + pairs + _NEIGHBOUR_TYPES_SQL.format(ref_rel=ref_rel)
 
 
-@router.get("/asns/{asn}/neighbours", summary="Voisins BGP observés d'un AS")
+@router.get(
+    "/asns/{asn}/neighbours",
+    response_model=NeighboursResponse,
+    summary="Voisins BGP observés d'un AS",
+)
 def neighbour_table(
     asn: int,
     kind: str = Query("all", alias="type", pattern="^(all|provider|customer|peer|unspecified)$"),
     date_from: datetime | None = Query(None, alias="from"),
     date_to: datetime | None = Query(None, alias="to"),
     data: DataAccess = Depends(get_data_access),
-) -> dict[str, Any]:
+) -> NeighboursResponse:
     d0, d1 = _day_range(*_bounds(data, date_from, date_to))
     type_clause = "" if kind == "all" else "WHERE kind = $4"
     params: list[Any] = [asn, d0, d1] + ([] if kind == "all" else [kind])
@@ -572,13 +601,13 @@ def neighbour_table(
         r["history"] = [
             d.date().isoformat() if hasattr(d, "date") else str(d) for d in r["history"]
         ]
-    return {
-        "asn": asn,
-        "days": [d.date().isoformat() if hasattr(d, "date") else str(d) for d in all_days],
-        "counts": {k: sum(1 for r in rows if r["type"] == k) for k in NEIGHBOUR_TYPES},
-        "status_counts": status_counts,
-        "items": rows,
-    }
+    return NeighboursResponse(
+        asn=asn,
+        days=[d.date().isoformat() if hasattr(d, "date") else str(d) for d in all_days],
+        counts={k: sum(1 for r in rows if r["type"] == k) for k in NEIGHBOUR_TYPES},
+        status_counts=status_counts,
+        items=[NeighbourRow(**row) for row in rows],
+    )
 
 
 @router.get(
@@ -657,6 +686,7 @@ def _country_typed_sql(data: DataAccess, summary: bool) -> str:
 
 @router.get(
     "/countries/{iso2}/neighbours",
+    response_model=CountryNeighboursResponse,
     summary="Voisins BGP des AS d'un pays, par AS membre et par type de relation",
 )
 def country_neighbour_table(
@@ -665,17 +695,17 @@ def country_neighbour_table(
     date_from: datetime | None = Query(None, alias="from"),
     date_to: datetime | None = Query(None, alias="to"),
     data: DataAccess = Depends(get_data_access),
-) -> dict[str, Any]:
+) -> CountryNeighboursResponse:
     """Une ligne par couple (AS du pays, voisin) : `member_asn` est l'AS du pays."""
     d0, d1 = _day_range(*_bounds(data, date_from, date_to))
     code = iso2.upper()
-    empty: dict[str, Any] = {
-        "country_iso2": code,
-        "days": [],
-        "counts": {k: 0 for k in NEIGHBOUR_TYPES},
-        "status_counts": {"stable": 0, "new": 0, "left": 0, "unstable": 0},
-        "items": [],
-    }
+    empty = CountryNeighboursResponse(
+        country_iso2=code,
+        days=[],
+        counts={k: 0 for k in NEIGHBOUR_TYPES},
+        status_counts={"stable": 0, "new": 0, "left": 0, "unstable": 0},
+        items=[],
+    )
     if not data.exists("ref_asn") or not data.exists("bgp_elements"):
         return empty
     type_clause = "" if kind == "all" else "WHERE kind = $4"
@@ -707,13 +737,13 @@ def country_neighbour_table(
     for r in rows:
         r["country_iso2"] = countries.get(int(r["asn"]))
         r["history"] = [iso(day) for day in r["history"]]
-    return {
-        "country_iso2": code,
-        "days": [iso(day) for day in all_days],
-        "counts": {k: sum(1 for r in rows if r["type"] == k) for k in NEIGHBOUR_TYPES},
-        "status_counts": status_counts,
-        "items": rows,
-    }
+    return CountryNeighboursResponse(
+        country_iso2=code,
+        days=[iso(day) for day in all_days],
+        counts={k: sum(1 for r in rows if r["type"] == k) for k in NEIGHBOUR_TYPES},
+        status_counts=status_counts,
+        items=[CountryNeighbourRow(**row) for row in rows],
+    )
 
 
 @router.get(
@@ -813,6 +843,7 @@ def _without_counts(runs: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 @router.get(
     "/asns/{asn}/prefixes/{prefix:path}/history",
+    response_model=PrefixHistoryResponse,
     summary="Périodes d'annonce d'un préfixe par cet AS",
 )
 def prefix_announcement_history(
@@ -821,19 +852,12 @@ def prefix_announcement_history(
     date_from: datetime | None = Query(None, alias="from"),
     date_to: datetime | None = Query(None, alias="to"),
     data: DataAccess = Depends(get_data_access),
-) -> dict[str, Any]:
+) -> PrefixHistoryResponse:
     """Quand cet AS a annoncé ce préfixe : chaque période continue, avec ses trous.
 
     Le tableau des préfixes ne donne que le premier et le dernier jour vus, ce qui
     cache les interruptions ; un préfixe « instable » se lit ici."""
-    empty: dict[str, Any] = {
-        "asn": asn,
-        "prefix": prefix,
-        "start": None,
-        "end": None,
-        "items": [],
-        "daily": [],
-    }
+    empty = PrefixHistoryResponse(asn=asn, prefix=prefix)
     if not data.exists("bgp_elements"):
         return empty
     d0, d1 = _day_range(*_bounds(data, date_from, date_to))
@@ -856,17 +880,19 @@ def prefix_announcement_history(
             [asn, d0, d1, prefix],
         )
     present = {r["day"].date(): int(r["n"]) for r in rows}
-    return {
-        **empty,
-        "start": days[0].isoformat(),
-        "end": days[-1].isoformat(),
-        "items": _runs(present, days),
-        "daily": [{"day": d.isoformat(), "observations": present.get(d, 0)} for d in days],
-    }
+    return PrefixHistoryResponse(
+        asn=asn,
+        prefix=prefix,
+        start=days[0].isoformat(),
+        end=days[-1].isoformat(),
+        items=[PeriodRun(**run) for run in _runs(present, days)],
+        daily=[DailyObservation(day=d.isoformat(), observations=present.get(d, 0)) for d in days],
+    )
 
 
 @router.get(
     "/asns/{asn}/neighbours/{neighbour}/history",
+    response_model=NeighbourHistoryResponse,
     summary="Historique de la relation entre deux AS (IPv4 / IPv6)",
 )
 def neighbour_history(
@@ -875,19 +901,10 @@ def neighbour_history(
     date_from: datetime | None = Query(None, alias="from"),
     date_to: datetime | None = Query(None, alias="to"),
     data: DataAccess = Depends(get_data_access),
-) -> dict[str, Any]:
+) -> NeighbourHistoryResponse:
     """Quand ces deux AS ont été vus côte à côte sur un chemin, par famille
     d'adresses, avec le type de la relation (fournisseur, client, pair)."""
-    empty: dict[str, Any] = {
-        "asn": asn,
-        "neighbour": neighbour,
-        "type": "unspecified",
-        "start": None,
-        "end": None,
-        "ipv4": [],
-        "ipv6": [],
-        "daily": [],
-    }
+    empty = NeighbourHistoryResponse(asn=asn, neighbour=neighbour, type="unspecified")
     if not data.exists("bgp_elements"):
         return empty
     d0, d1 = _day_range(*_bounds(data, date_from, date_to))
@@ -904,19 +921,19 @@ def neighbour_history(
     by_family: dict[int, dict[date, int]] = {4: {}, 6: {}}
     for r in rows:
         by_family[int(r["ip_version"])][r["day"].date()] = 1
-    result = {
-        **empty,
-        "type": rows[-1]["kind"] if rows else "unspecified",
-        "start": days[0].isoformat(),
-        "end": days[-1].isoformat(),
-        "ipv4": _without_counts(_runs(by_family[4], days)),
-        "ipv6": _without_counts(_runs(by_family[6], days)),
-        "daily": [
-            {"day": d.isoformat(), "ipv4": d in by_family[4], "ipv6": d in by_family[6]}
+    return NeighbourHistoryResponse(
+        asn=asn,
+        neighbour=neighbour,
+        type=rows[-1]["kind"] if rows else "unspecified",
+        start=days[0].isoformat(),
+        end=days[-1].isoformat(),
+        ipv4=[PeriodPresence(**run) for run in _without_counts(_runs(by_family[4], days))],
+        ipv6=[PeriodPresence(**run) for run in _without_counts(_runs(by_family[6], days))],
+        daily=[
+            DailyPresence(day=d.isoformat(), ipv4=d in by_family[4], ipv6=d in by_family[6])
             for d in days
         ],
-    }
-    return result
+    )
 
 
 @router.get(
