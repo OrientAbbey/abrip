@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from pydantic import BaseModel, Field, field_serializer
+from pydantic import BaseModel, Field, RootModel, field_serializer
 
 
 def _serialize_datetimes(value: Any) -> Any:
@@ -145,3 +145,56 @@ class SearchHit(ApiModel):
     value: str
     label: str
     detail: dict[str, Any] = Field(default_factory=dict)
+
+
+class AsnNames(RootModel[dict[str, str]]):
+    """Table plate ASN → nom : les clés sont des numéros d'AS, pas des champs."""
+
+    root: dict[str, str]
+
+
+class EventFacets(ApiModel):
+    detector: dict[str, int] = Field(default_factory=dict)
+    severity: dict[str, int] = Field(default_factory=dict)
+    country_iso2: dict[str, int] = Field(default_factory=dict)
+    confidence: dict[str, int] = Field(default_factory=dict)
+
+
+class CountryIndicator(ApiModel):
+    country_iso2: str
+    transit_dependency_ratio: float | None = None
+    hhi_transit: float | None = None
+    avg_upstream_count: float | None = None
+    asns_observed: int | None = None
+    avg_visibility: float | None = None
+    prefixes_visible: int | None = None
+    coverage_ratio: float | None = None
+    rpki_coverage_ratio: float | None = None
+
+
+class IncidentOut(ApiModel):
+    """Version publique d'un incident : les datetimes passent par `ApiModel`."""
+
+    incident_id: str
+    prefix: str | None = None
+    severity: str
+    score: float
+    first_seen: datetime
+    last_seen: datetime
+    event_ids: list[str] = Field(default_factory=list)
+    detectors: list[str] = Field(default_factory=list)
+    summary: str = ""
+
+
+class CountryRelation(ApiModel):
+    asn: int
+    country_iso2: str | None = None
+    local_asns: list[int] = Field(default_factory=list)
+
+
+class CountryRelationships(ApiModel):
+    country_iso2: str
+    asns: list[int] = Field(default_factory=list)
+    providers: list[CountryRelation] = Field(default_factory=list)
+    customers: list[CountryRelation] = Field(default_factory=list)
+    peers: list[CountryRelation] = Field(default_factory=list)

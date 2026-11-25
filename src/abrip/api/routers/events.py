@@ -15,7 +15,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from abrip.api.deps import DataAccess, clamp_limit, get_data_access
-from abrip.api.schemas import EventOut, Page
+from abrip.api.schemas import EventFacets, EventOut, IncidentOut, Page
 
 router = APIRouter(tags=["événements"])
 
@@ -123,8 +123,12 @@ def list_events(
     return Page(items=[_to_event(r) for r in rows], total=total, limit=limit, offset=offset)
 
 
-@router.get("/events/facets", summary="Cardinalités par détecteur, sévérité et pays")
-def event_facets(data: DataAccess = Depends(get_data_access)) -> dict[str, dict[str, int]]:
+@router.get(
+    "/events/facets",
+    response_model=EventFacets,
+    summary="Cardinalités par détecteur, sévérité et pays",
+)
+def event_facets(data: DataAccess = Depends(get_data_access)) -> EventFacets:
     source = data.table("events")
 
     def counts(column: str) -> dict[str, int]:
@@ -134,12 +138,12 @@ def event_facets(data: DataAccess = Depends(get_data_access)) -> dict[str, dict[
         )
         return {str(r["k"]): int(r["n"]) for r in rows}
 
-    return {
-        "detector": counts("detector"),
-        "severity": counts("severity"),
-        "country_iso2": counts("country_iso2"),
-        "confidence": counts("confidence"),
-    }
+    return EventFacets(
+        detector=counts("detector"),
+        severity=counts("severity"),
+        country_iso2=counts("country_iso2"),
+        confidence=counts("confidence"),
+    )
 
 
 @router.get("/events/{event_id}", response_model=EventOut, summary="Détail d'un événement")
@@ -221,13 +225,17 @@ def event_timeline(
     }
 
 
-@router.get("/incidents", summary="Incidents corrélés (plusieurs détecteurs, même préfixe)")
+@router.get(
+    "/incidents",
+    response_model=Page[IncidentOut],
+    summary="Incidents corrélés (plusieurs détecteurs, même préfixe)",
+)
 def list_incidents(
     severity: list[str] | None = Query(None),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
     data: DataAccess = Depends(get_data_access),
-) -> Page[dict[str, Any]]:
+) -> Page[IncidentOut]:
     limit = clamp_limit(limit)
     source = data.table("incidents")
     conditions: list[str] = []
@@ -241,10 +249,10 @@ def list_incidents(
         f"SELECT * FROM {source} {where} ORDER BY score DESC LIMIT ? OFFSET ?",
         [*params, limit, offset],
     )
-    items = []
+    items: list[IncidentOut] = []
     for row in rows:
         item = dict(row)
         item["event_ids"] = [str(e) for e in item.get("event_ids") or []]
         item["detectors"] = [str(d) for d in item.get("detectors") or []]
-        items.append(item)
+        items.append(IncidentOut(**item))
     return Page(items=items, total=total, limit=limit, offset=offset)

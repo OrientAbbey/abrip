@@ -27,7 +27,7 @@ from pydantic import BaseModel
 
 from abrip.analytics.daily import ADJACENCY, PREFIX_ORIGIN, adjacency_sql, summary_is_current
 from abrip.api.deps import DataAccess, clamp_limit, get_data_access
-from abrip.api.schemas import Page, Series, TimePoint
+from abrip.api.schemas import CountryRelation, CountryRelationships, Page, Series, TimePoint
 from abrip.reference.history import annotate_history, classify_presence, snapshot_dates
 from abrip.reference.irr import IrrValidator
 from abrip.reference.rpki import RpkiValidator
@@ -919,27 +919,27 @@ def neighbour_history(
     return result
 
 
-@router.get("/countries/{iso2}/relationships", summary="AS d'un pays et relations agrégées")
-def country_relationships(iso2: str, data: DataAccess = Depends(get_data_access)) -> dict[str, Any]:
+@router.get(
+    "/countries/{iso2}/relationships",
+    response_model=CountryRelationships,
+    summary="AS d'un pays et relations agrégées",
+)
+def country_relationships(
+    iso2: str, data: DataAccess = Depends(get_data_access)
+) -> CountryRelationships:
     """Vue de tout un pays : ses AS, et pour chaque relation CAIDA reliant un AS
     du pays à un AS extérieur, le voisin classé fournisseur / client / pair
     *du point de vue du pays*, avec le nombre d'AS du pays qu'il relie.
     """
     code = iso2.upper()
     if not data.exists("ref_asn"):
-        return {"country_iso2": code, "asns": [], "providers": [], "customers": [], "peers": []}
+        return CountryRelationships(country_iso2=code)
 
     asn_rows = data.query(
         f"SELECT asn FROM {data.table('ref_asn')} WHERE country_iso2 = $1 ORDER BY asn", [code]
     )
     local = [int(r["asn"]) for r in asn_rows]
-    result: dict[str, Any] = {
-        "country_iso2": code,
-        "asns": local,
-        "providers": [],
-        "customers": [],
-        "peers": [],
-    }
+    result = CountryRelationships(country_iso2=code, asns=local)
     if not local or not data.exists("ref_as_rel"):
         return result
 
@@ -966,11 +966,13 @@ def country_relationships(iso2: str, data: DataAccess = Depends(get_data_access)
             buckets[bucket].setdefault(other, set()).add(mine)
 
     for bucket, mapping in buckets.items():
-        result[bucket] = sorted(
-            (
-                {"asn": other, "country_iso2": countries.get(other), "local_asns": sorted(mine)}
-                for other, mine in mapping.items()
-            ),
-            key=lambda item: (-len(item["local_asns"]), item["asn"]),
+        relations = [
+            CountryRelation(asn=other, country_iso2=countries.get(other), local_asns=sorted(mine))
+            for other, mine in mapping.items()
+        ]
+        setattr(
+            result,
+            bucket,
+            sorted(relations, key=lambda item: (-len(item.local_asns), item.asn)),
         )
     return result
