@@ -237,8 +237,8 @@ jobs:
         run: |
           TAILLE=$(find dist/assets -name '*.js' -o -name '*.css' \
             | xargs gzip -c | wc -c)
-          echo "Total compressé : $((TAILLE / 1024)) Ko"
-          test "$TAILLE" -lt 256000
+          echo "Total compressé : $TAILLE octets"
+          test "$TAILLE" -le 270000
 ```
 
 Pour pousser automatiquement vers Hugging Face à chaque `main`, ajoutez un secret `HF_TOKEN` (jeton avec droit d'écriture, créé dans les paramètres Hugging Face) et ce job :

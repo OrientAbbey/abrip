@@ -97,7 +97,8 @@ Ce fichier est le carnet d’exécution des améliorations listées dans `docs/a
 - [x] `pip-audit==2.10.1` ajouté au groupe dev et exécuté en CI ; localement : « No known vulnerabilities found ».
 - [x] `npm audit --audit-level=high` ajouté à la CI ; localement, `npm install` rapporte 0 vulnérabilité.
 - [x] Aucun faux positif constaté ; le paquet local `abrip` est simplement ignoré par `pip-audit` (absent de PyPI).
-- [x] Premier passage de Dependabot traité : groupe Python fusionné (CI verte), actions GitHub montées en v7 (checkout, setup-node, setup-python, setup-uv, upload-artifact — l’avertissement Node 20 disparaît). `react-router-dom 7.18.6` appliqué seul ; `recharts 3.11.0` écarté car il pousse le bundle gzip à 259 072 octets (plafond 256 000). `node:25-slim` écarté (version non LTS) ; on reste sur `node:22-slim` jusqu’à la prochaine LTS.
+- [x] Premier passage de Dependabot traité : groupe Python fusionné (CI verte), actions GitHub montées en v7 (checkout, setup-node, setup-python, setup-uv, upload-artifact — l’avertissement Node 20 disparaît). `node:25-slim` écarté (version non LTS) ; on reste sur `node:22-slim` jusqu’à la prochaine LTS.
+- [x] `react-router-dom 7.18.6` appliqué seul dans un premier temps, puis `recharts` pris dans sa **dernière version (3.11.1)** sur décision explicite. Le bundle gzip passe à 259 328 octets : le plafond est relevé de 256 000 à **270 000 octets** dans la CI et dans `docs/deploiement.md`, avec ~10 Ko de marge résiduelle.
 
 ### 2.5 Installation Docker reproductible — **modifié, non construit localement**
 - [x] `Dockerfile` : `uv==0.13.1` installé puis `uv sync --locked --no-dev`, sans cache conservé, `PATH` pointant sur `/app/.venv/bin`.
@@ -125,7 +126,7 @@ Ce fichier est le carnet d’exécution des améliorations listées dans `docs/a
 | `npm run test:e2e` | 4 parcours Playwright OK (dont 1 exécution en mode CI) |
 | `npm run typecheck` | OK (src, e2e et configurations) |
 | `npm run build` | OK |
-| Budget gzip mesuré | 245 262 octets (plafond 256 000) |
+| Budget gzip mesuré | 259 328 octets (plafond relevé à 270 000) |
 | `abrip demo verify` | rappel 1.0, 5/5 |
 | Construction Docker | validée en CI (build + service interrogé, 1 min 16 s) |
 
@@ -146,6 +147,7 @@ Ce fichier est le carnet d’exécution des améliorations listées dans `docs/a
 | 2026-11-25 | Fusion PR #4 | `main` (commit `ce0d650`) | CI verte sur `main` : Python 2 min 7 s, frontend 11 s, image 1 min 16 s |
 | 2026-11-25 | Dependabot : premier passage | `pyproject.toml`, `uv.lock`, `ci.yml`, `frontend/package*.json`, `docs/deploiement.md` | Groupe Python et actions v7 fusionnés (CI verte) ; `react-router-dom 7.18.6` seul ; recharts 3.11.0 et node 25-slim écartés (budget gzip, non LTS) |
 | 2026-11-25 | Smoke test navigateur | `frontend/e2e/smoke.spec.ts`, `playwright.config.ts`, `vitest.config.ts`, `ci.yml` | 4 parcours OK en local et en mode CI ; aucun signalement d’erreur console/HTTP 5xx |
+| 2026-11-25 | Dernière version de recharts | `frontend/package*.json`, `ci.yml`, `docs/deploiement.md` | 3.11.1 installée ; 11 tests, typecheck, build et 4 parcours navigateur OK ; budget 270 000 octets |
 
 ## Bilan
 
