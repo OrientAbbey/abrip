@@ -135,8 +135,14 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 - [x] `PrefixFacets` déplacé dans `api/schemas.py` et aligné sur `ApiModel` ; les helpers internes (`_runs`, `_add_statuses`) restent en `dict`, le modèle n’étant appliqué qu’à la frontière HTTP.
 - [x] Vérification : 326 tests réussis (dont les 316 d’équivalence tables journalières) et 4 parcours navigateur OK.
 
-### Sous-lots restants (non implémentés)
-- [ ] **3.4** fiches `asn_detail`, `prefix_detail` et `event_timeline` : datetimes naïfs à convertir en `Z`, `SELECT *`, `EventOut.model_dump()` en mode python.
+### 3.4 Fiches AS, préfixe et timeline — **fait**
+- [x] `AsnDetail`, `PrefixDetail` et `EventTimeline` avec `response_model` explicite sur `/asns/{asn}`, `/prefixes/{prefix}` et `/events/{id}/timeline`.
+- [x] Sous-modèles dédiés (`AsnIdentity`, `PrefixOrigin`, `TopPath`, `VisibilitySnapshot`, `RoaEntry`, `ChurnPoint`, `VisibilityPoint`, …) : plus aucun `dict` ad hoc dans ces trois réponses.
+- [x] Les datetimes naïfs de ces endpoints sortent désormais avec `Z`, y compris dans `event`, `related_events`, `incident` et les séries de la timeline (anciennement `model_dump()` en mode python, sans suffixe).
+- [x] `identity` reste un schéma explicite aligné sur `REF_ASN_SCHEMA` ; les colonnes inattendues d’un `SELECT *` ne fuient plus dans le contrat.
+- [x] Vérification : 13 tests de contrat, 65 tests ciblés et 4 parcours navigateur OK. **La réserve UTC du lot 1 est ainsi close.**
+
+### Sous-lot restant (non implémenté)
 - [ ] **3.5** `propagation.py` : trois endpoints avec clés dynamiques (`as{n}`), `paths` nullable, `path_ids` conditionnel et bornes temporelles ; à découper en trois PR.
 
 ## Vérification finale du lot 1 + 2
@@ -150,7 +156,7 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 | Suite Python complète | 735 réussis, 8 échecs d’équivalence corrigés en 1.7 ; fichiers API/tableaux rejoués après correction : 316 + 216 réussis |
 | Couverture Python | 81,03 % (seuil CI 80 %) |
 | `npm test` | 11 tests OK |
-| `tests/test_api_contrat_schemas.py` | 10 tests de contrat (OpenAPI, facets, pays, noms AS, incidents UTC, relations, préfixes, voisins, historiques, périodes) |
+| `tests/test_api_contrat_schemas.py` | 13 tests de contrat (OpenAPI, facets, pays, noms AS, incidents UTC, relations, préfixes, voisins, historiques, périodes, fiches AS/préfixe/timeline) |
 | `npm run test:e2e` | 4 parcours Playwright OK (dont 1 exécution en mode CI) |
 | `npm run typecheck` | OK (src, e2e et configurations) |
 | `npm run build` | OK |
@@ -178,10 +184,11 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 | 2026-11-25 | Dernière version de recharts | `frontend/package*.json`, `ci.yml`, `docs/deploiement.md` | 3.11.1 installée ; 11 tests, typecheck, build et 4 parcours navigateur OK ; budget 270 000 octets |
 | 2026-11-25 | Lot 3, sous-lots 0 à 2 | `api/schemas.py`, `api/routers/{explore,events,asn_explorer}.py`, `tests/test_api_contrat_schemas.py` | 63 tests ciblés OK, ruff et mypy OK ; 5 endpoints typés, UTC conservé sur les incidents |
 | 2026-11-25 | Lot 3, sous-lot 3.3 | `api/schemas.py`, `api/routers/asn_explorer.py`, `tests/test_api_contrat_schemas.py` | 8 endpoints typés ; 326 tests OK dont 316 d’équivalence, 4 parcours navigateur OK |
+| 2026-11-25 | Lot 3, sous-lot 3.4 | `api/schemas.py`, `api/routers/{explore,events}.py`, `tests/test_api_contrat_schemas.py` | 3 fiches typées ; datetimes en `Z` ; 13 tests de contrat et 4 parcours navigateur OK |
 
 ## Bilan
 
-- **Lot 1 :** terminé et vérifié (seule réserve : les réponses `dict` ad hoc conservent des datetimes naïfs, interprétés comme UTC par le frontend).
+- **Lot 1 :** terminé et vérifié ; sa réserve sur les datetimes naïfs des réponses `dict` ad hoc est close par le lot 3.4.
 - **Lot 2 :** terminé : formatage, couverture, tests frontend (unitaires et navigateur), audits, Dependabot, pre-commit et Dockerfile. L’image est construite et démarrée en CI ; les parcours critiques sont joués dans Chromium.
-- **Lot 3 :** en cours ; sous-lots 0 à 3 terminés (13 endpoints typés sur 19), sous-lots 3.4 et 3.5 à venir.
+- **Lot 3 :** en cours ; sous-lots 0 à 4 terminés (16 endpoints typés sur 19), sous-lot 3.5 (propagation) à venir.
 - **Points reportés :** reste de la section 3 et section 4 de `docs/ameliorations-proposees.md`.

@@ -27,6 +27,7 @@ def test_schemas_exposes_dans_openapi(client):
     assert "CountryRelationships" in schemas
     assert "AsnNames" in schemas
     assert {"PrefixRow", "NeighboursResponse", "RoaHistoryResponse", "PeriodRun"} <= set(schemas)
+    assert {"AsnDetail", "PrefixDetail", "EventTimeline"} <= set(schemas)
     assert set(schemas["EventFacets"]["properties"]) == {
         "detector",
         "severity",
@@ -155,3 +156,43 @@ class TestContratAvecDonnees:
                 assert "observations" not in run
                 assert set(run) == {"first_seen", "last_seen", "days", "active"}
         assert all(set(day) == {"day", "ipv4", "ipv6"} for day in neighbours["daily"])
+
+    def test_fiche_as_est_typée_et_en_utc(self, client):
+        body = client.get("/api/asns/37100").json()
+        assert set(body) == {"asn", "identity", "prefixes", "upstreams", "events"}
+        assert set(body["identity"]) == {
+            "asn",
+            "country_iso2",
+            "rir",
+            "is_african",
+            "allocation_date",
+            "snapshot_date",
+        }
+        for row in body["prefixes"]:
+            assert row["first_seen"].endswith("Z")
+            assert row["last_seen"].endswith("Z")
+        for row in body["events"]:
+            assert row["first_seen"].endswith("Z")
+
+    def test_fiche_prefixe_est_typée_et_en_utc(self, client):
+        body = client.get("/api/prefixes/102.22.8.0%2F22").json()
+        assert set(body) == {"prefix", "origins", "top_paths", "visibility", "roa", "events"}
+        for row in body["origins"]:
+            assert row["first_seen"].endswith("Z")
+            assert row["last_seen"].endswith("Z")
+        for row in body["visibility"]:
+            assert row["snapshot_ts"].endswith("Z")
+        for row in body["events"]:
+            assert row["first_seen"].endswith("Z")
+
+    def test_timeline_evenement_est_typée_et_en_utc(self, client):
+        events = client.get("/api/events", params={"limit": 1}).json()["items"]
+        assert events
+        body = client.get(f"/api/events/{events[0]['event_id']}/timeline").json()
+        assert set(body) == {"event", "incident", "related_events", "churn", "visibility"}
+        assert body["event"]["first_seen"].endswith("Z")
+        assert body["event"]["last_seen"].endswith("Z")
+        for point in body["churn"]:
+            assert point["ts"].endswith("Z")
+        for point in body["visibility"]:
+            assert point["ts"].endswith("Z")

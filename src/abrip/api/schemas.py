@@ -331,3 +331,117 @@ class NeighbourHistoryResponse(ApiModel):
     ipv4: list[PeriodPresence] = Field(default_factory=list)
     ipv6: list[PeriodPresence] = Field(default_factory=list)
     daily: list[DailyPresence] = Field(default_factory=list)
+
+
+class AsnIdentity(ApiModel):
+    asn: int | None = None
+    country_iso2: str | None = None
+    rir: str | None = None
+    is_african: bool | None = None
+    allocation_date: str | None = None
+    snapshot_date: str | None = None
+
+
+class AsnPrefix(ApiModel):
+    prefix: str
+    updates: int
+    first_seen: datetime
+    last_seen: datetime
+    peers: int
+
+
+class AsnUpstream(ApiModel):
+    primary_upstream: int | None = None
+    hhi_transit: float | None = None
+    upstream_count: int | None = None
+    windows: int
+
+
+class AsnEvent(ApiModel):
+    event_id: str
+    detector: str
+    severity: str
+    score: float
+    prefix: str | None = None
+    first_seen: datetime
+    explanation: str
+
+
+class AsnDetail(ApiModel):
+    asn: int
+    identity: AsnIdentity
+    prefixes: list[AsnPrefix]
+    upstreams: list[AsnUpstream]
+    events: list[AsnEvent]
+
+
+class PrefixOrigin(ApiModel):
+    origin_asn: int
+    announcements: int
+    first_seen: datetime
+    last_seen: datetime
+    peers: int
+
+
+class TopPath(ApiModel):
+    as_path: str | None = None
+    observations: int
+    peers: int
+
+
+class VisibilitySnapshot(ApiModel):
+    snapshot_ts: datetime
+    visibility_ratio: float | None = None
+    peers_seeing: int | None = None
+    peers_total: int | None = None
+    collectors_seeing: int | None = None
+
+
+class RoaEntry(ApiModel):
+    prefix: str
+    asn: int
+    max_len: int | None = None
+    ta: str | None = None
+
+
+class PrefixEvent(ApiModel):
+    event_id: str
+    detector: str
+    severity: str
+    score: float
+    confidence: str
+    first_seen: datetime
+    explanation: str
+
+
+class PrefixDetail(ApiModel):
+    prefix: str
+    origins: list[PrefixOrigin]
+    top_paths: list[TopPath]
+    visibility: list[VisibilitySnapshot]
+    roa: list[RoaEntry]
+    events: list[PrefixEvent]
+
+
+class ChurnPoint(ApiModel):
+    ts: datetime
+    announcements: int
+    withdrawals: int
+    updates_total: int
+
+
+class VisibilityPoint(ApiModel):
+    ts: datetime
+    visibility_ratio: float | None = None
+    visibility_local: float | None = None
+    visibility_external: float | None = None
+    peers_seeing: int | None = None
+    peers_total: int | None = None
+
+
+class EventTimeline(ApiModel):
+    event: EventOut
+    incident: IncidentOut | None = None
+    related_events: list[EventOut] = Field(default_factory=list)
+    churn: list[ChurnPoint] = Field(default_factory=list)
+    visibility: list[VisibilityPoint] = Field(default_factory=list)
