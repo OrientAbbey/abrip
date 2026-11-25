@@ -9,12 +9,23 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from abrip.analytics.daily import PREFIX_ORIGIN, summary_is_current
 from abrip.api.deps import DataAccess, clamp_limit, get_data_access
 from abrip.api.schemas import (
+    AsnDetail,
+    AsnEvent,
+    AsnIdentity,
     AsnNames,
+    AsnPrefix,
     AsnSummary,
+    AsnUpstream,
     CountryIndicator,
     Page,
+    PrefixDetail,
+    PrefixEvent,
+    PrefixOrigin,
     PrefixSummary,
+    RoaEntry,
     SearchHit,
+    TopPath,
+    VisibilitySnapshot,
 )
 
 router = APIRouter(tags=["exploration"])
@@ -145,8 +156,8 @@ def list_asns(
     return Page[AsnSummary](items=items, total=total, limit=limit, offset=offset)
 
 
-@router.get("/asns/{asn}", summary="Fiche d'un système autonome")
-def asn_detail(asn: int, data: DataAccess = Depends(get_data_access)) -> dict:
+@router.get("/asns/{asn}", response_model=AsnDetail, summary="Fiche d'un système autonome")
+def asn_detail(asn: int, data: DataAccess = Depends(get_data_access)) -> AsnDetail:
     elements = data.table("bgp_elements")
     prefixes = data.query(
         f"""SELECT prefix, count(*) AS updates, min(ts) AS first_seen, max(ts) AS last_seen,
@@ -188,13 +199,13 @@ def asn_detail(asn: int, data: DataAccess = Depends(get_data_access)) -> dict:
             [asn],
         )
 
-    return {
-        "asn": asn,
-        "identity": identity,
-        "prefixes": prefixes,
-        "upstreams": upstreams,
-        "events": events,
-    }
+    return AsnDetail(
+        asn=asn,
+        identity=AsnIdentity(**identity),
+        prefixes=[AsnPrefix(**row) for row in prefixes],
+        upstreams=[AsnUpstream(**row) for row in upstreams],
+        events=[AsnEvent(**row) for row in events],
+    )
 
 
 @router.get("/prefixes", response_model=Page[PrefixSummary], summary="Préfixes observés")
@@ -272,8 +283,8 @@ def list_prefixes(
     return Page[PrefixSummary](items=items, total=total, limit=limit, offset=offset)
 
 
-@router.get("/prefixes/{prefix:path}", summary="Fiche d'un préfixe")
-def prefix_detail(prefix: str, data: DataAccess = Depends(get_data_access)) -> dict:
+@router.get("/prefixes/{prefix:path}", response_model=PrefixDetail, summary="Fiche d'un préfixe")
+def prefix_detail(prefix: str, data: DataAccess = Depends(get_data_access)) -> PrefixDetail:
     elements = data.table("bgp_elements")
     origins = data.query(
         f"""SELECT origin_asn, count(*) AS announcements, min(ts) AS first_seen,
@@ -323,14 +334,14 @@ def prefix_detail(prefix: str, data: DataAccess = Depends(get_data_access)) -> d
             [prefix],
         )
 
-    return {
-        "prefix": prefix,
-        "origins": origins,
-        "top_paths": paths,
-        "visibility": visibility,
-        "roa": roa,
-        "events": events,
-    }
+    return PrefixDetail(
+        prefix=prefix,
+        origins=[PrefixOrigin(**row) for row in origins],
+        top_paths=[TopPath(**row) for row in paths],
+        visibility=[VisibilitySnapshot(**row) for row in visibility],
+        roa=[RoaEntry(**row) for row in roa],
+        events=[PrefixEvent(**row) for row in events],
+    )
 
 
 @router.get(

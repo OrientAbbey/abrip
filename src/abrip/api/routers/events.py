@@ -15,7 +15,15 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from abrip.api.deps import DataAccess, clamp_limit, get_data_access
-from abrip.api.schemas import EventFacets, EventOut, IncidentOut, Page
+from abrip.api.schemas import (
+    ChurnPoint,
+    EventFacets,
+    EventOut,
+    EventTimeline,
+    IncidentOut,
+    Page,
+    VisibilityPoint,
+)
 
 router = APIRouter(tags=["événements"])
 
@@ -157,11 +165,15 @@ def get_event(event_id: str, data: DataAccess = Depends(get_data_access)) -> Eve
     return _to_event(rows[0])
 
 
-@router.get("/events/{event_id}/timeline", summary="Contexte temporel autour d'un événement")
+@router.get(
+    "/events/{event_id}/timeline",
+    response_model=EventTimeline,
+    summary="Contexte temporel autour d'un événement",
+)
 def event_timeline(
     event_id: str,
     data: DataAccess = Depends(get_data_access),
-) -> dict[str, Any]:
+) -> EventTimeline:
     """Renvoie le churn et la visibilité du préfixe concerné, plus les autres
     événements du même incident. C'est ce qui permet au frontend d'afficher une
     page de détail justifiant l'alerte au lieu de l'asséner."""
@@ -193,22 +205,23 @@ def event_timeline(
                 [event.prefix],
             )
 
-    related: list[dict[str, Any]] = []
-    incident: dict[str, Any] | None = None
+    related: list[EventOut] = []
+    incident: IncidentOut | None = None
     if data.exists("incidents"):
         found = data.query(
             f"SELECT * FROM {data.table('incidents')} WHERE list_contains(event_ids, ?)",
             [event_id],
         )
         if found:
-            incident = dict(found[0])
-            incident["event_ids"] = [str(e) for e in incident.get("event_ids") or []]
-            incident["detectors"] = [str(d) for d in incident.get("detectors") or []]
-            siblings = [e for e in incident["event_ids"] if e != event_id]
+            raw = dict(found[0])
+            raw["event_ids"] = [str(e) for e in raw.get("event_ids") or []]
+            raw["detectors"] = [str(d) for d in raw.get("detectors") or []]
+            incident = IncidentOut(**raw)
+            siblings = [e for e in incident.event_ids if e != event_id]
             if siblings:
                 placeholders = ",".join("?" * len(siblings))
                 related = [
-                    _to_event(r).model_dump()
+                    _to_event(r)
                     for r in data.query(
                         f"SELECT * FROM {data.table('events')} "
                         f"WHERE event_id IN ({placeholders}) ORDER BY score DESC",
@@ -216,13 +229,13 @@ def event_timeline(
                     )
                 ]
 
-    return {
-        "event": event.model_dump(),
-        "incident": incident,
-        "related_events": related,
-        "churn": churn,
-        "visibility": visibility,
-    }
+    return EventTimeline(
+        event=event,
+        incident=incident,
+        related_events=related,
+        churn=[ChurnPoint(**row) for row in churn],
+        visibility=[VisibilityPoint(**row) for row in visibility],
+    )
 
 
 @router.get(
