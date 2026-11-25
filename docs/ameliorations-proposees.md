@@ -1,8 +1,8 @@
 # Améliorations proposées pour ABRIP
 
-Ce document conserve l’ensemble des pistes d’amélioration identifiées dans la revue du projet. Les points 1 et 2 sont terminés et consignés dans `docs/suivi-modifications.md` ; le lot 3 a commencé par le chantier des schémas de réponse typés ; le reste des points 3 et 4 est à planifier.
+Ce document conserve l’ensemble des pistes d’amélioration identifiées dans la revue du projet. Les lots 1 à 3 sont terminés et consignés dans `docs/suivi-modifications.md` ; le reste des points 3 et 4 est à planifier.
 
-## 1. Correctifs fonctionnels et de fiabilité — lot en cours
+## 1. Correctifs fonctionnels et de fiabilité — terminé
 
 - **Conserver l’historique des métriques lors d’un recalcul partiel** (`src/abrip/analytics/metrics.py`, `src/abrip/api/deps.py`) : partitionner les sorties par jour afin qu’un calcul quotidien ne remplace pas les métriques calculées précédemment pour d’autres jours.
 - **Réparer la pagination de la liste des AS** (`frontend/src/pages/AsnList.tsx`) : ne supprimer `offset` que lorsque l’utilisateur change un filtre, pas lors des actions Précédent/Suivant.
@@ -11,7 +11,7 @@ Ce document conserve l’ensemble des pistes d’amélioration identifiées dans
 - **Borner la mémoire lors de la curation** (`src/abrip/etl/curate.py`, `src/abrip/etl/pch_parser.py`) : écrire les RIB par lots avec `ParquetBatchWriter` et parcourir les relevés PCH en flux plutôt que de charger tout le fichier avec `readlines()`.
 - **Accélérer la validation RPKI** (`src/abrip/analytics/metrics.py`, `src/abrip/reference/rpki.py`) : utiliser `validate_frame`, qui déduplique les couples préfixe/origine, au lieu de valider chaque ligne répétée.
 
-## 2. Garde-fous de qualité — lot en cours
+## 2. Garde-fous de qualité — terminé
 
 - **Vérifier le formatage Ruff en CI** : ajouter `ruff format --check` au workflow GitHub Actions, en cohérence avec `make lint`.
 - **Mesurer la couverture Python** : activer `pytest-cov` en CI, publier un rapport et fixer un seuil initial réaliste pour empêcher les régressions.
@@ -23,7 +23,7 @@ Ce document conserve l’ensemble des pistes d’amélioration identifiées dans
 ## 3. Améliorations produit — à planifier
 
 - **Boucle de qualification humaine L5** (`docs/limites-et-remediations.md`, CLI et interface) : enregistrer les retours sur les événements, fournir `abrip detect label` et `abrip detect precision`, versionner une allowlist et afficher la précision par détecteur. Le rappel mesuré sur les anomalies de démonstration ne suffit pas à mesurer les faux positifs réels.
-- **Schémas de réponse typés partout — lot 3 en cours** : plusieurs endpoints renvoient encore des `dict` ad hoc (statistiques de préfixe, séries DuckDB) ; les convertir en modèles Pydantic unifierait la sérialisation UTC et le contrat public, aujourd’hui partiellement couvert par `ApiModel`. Sous-lots faits : facets, indicateurs pays, table des noms AS, incidents, relations d’un pays, huit tableaux/historiques de l’explorateur, puis les fiches AS/préfixe/timeline. Restent les trois endpoints de propagation (détail et ordre dans `docs/suivi-modifications.md`).
+- **Schémas de réponse typés partout — lot 3 terminé** : les 19 endpoints qui renvoyaient des `dict` ad hoc (statistiques de préfixe, séries DuckDB, fiches, tableaux, historiques, propagation) ont désormais un `response_model` Pydantic explicite. La sérialisation UTC est unifiée via `ApiModel` et les clés conditionnelles du contrat sont préservées. Détail des sous-lots dans `docs/suivi-modifications.md`.
 - **Détection sub-horaire** : compléter les détecteurs raisonnant actuellement par jour avec des fenêtres glissantes et des signatures adaptées aux incidents courts.
 - **Alerting opérationnel** (`src/abrip/cli.py`) : envoyer une notification (webhook, Slack ou e-mail) pour les incidents critiques, avec déduplication par `incident_id`.
 - **Tableau de qualité des données** : exposer la fraîcheur par source, la couverture par pays, le statut ROA et les collecteurs silencieux à partir des métriques et métadonnées existantes.

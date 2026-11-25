@@ -18,6 +18,20 @@ from fastapi import APIRouter, Depends, Query
 from abrip.analytics.metrics import _load_reference
 from abrip.analytics.replay import ReplayEvent, effective_step, orient_path, replay
 from abrip.api.deps import DataAccess, get_data_access
+from abrip.api.schemas import (
+    GraphEdge,
+    GraphNode,
+    PathRecord,
+    PropagationEdge,
+    PropagationNode,
+    PropagationReplayResponse,
+    PropagationResponse,
+    ReplayFrame,
+    ReplayFrameWithPaths,
+    Upstream,
+    UpstreamPoint,
+    UpstreamsResponse,
+)
 from abrip.reference.relationships import RelationshipIndex, valley_free_violation
 from abrip.reference.rpki import RpkiValidator
 
@@ -117,6 +131,7 @@ def _node(
 
 @router.get(
     "/prefixes/{prefix:path}/propagation",
+    response_model=PropagationResponse,
     summary="Graphe de propagation d'un préfixe (nœuds d'AS) — ADR 0004",
 )
 def prefix_propagation(
@@ -140,24 +155,24 @@ def prefix_propagation(
         description="Seuil de bruit : un chemin vu moins de N fois (messages BGP) est écarté",
     ),
     data: DataAccess = Depends(get_data_access),
-) -> dict[str, Any]:
+) -> PropagationResponse:
     """Graphe réduit (pas étendu, voir ADR 0004) : seuls les AS effectivement
     vus sur un chemin observé pour ce préfixe apparaissent — aucune
     complétion vers des voisins connus mais non observés.
     """
-    empty: dict[str, Any] = {
-        "prefix": prefix,
-        "asn": asn,
-        "start": date_from.date().isoformat() if date_from else None,
-        "end": date_to.date().isoformat() if date_to else None,
-        "nodes": [],
-        "edges": [],
-        "paths": [],
-        "paths_total": 0,
-        "paths_hidden": 0,
-        "max_observations": 0,
-        "moas": False,
-    }
+    empty = PropagationResponse(
+        prefix=prefix,
+        asn=asn,
+        start=date_from.date().isoformat() if date_from else None,
+        end=date_to.date().isoformat() if date_to else None,
+        nodes=[],
+        edges=[],
+        paths=[],
+        paths_total=0,
+        paths_hidden=0,
+        max_observations=0,
+        moas=False,
+    )
     if not data.exists("bgp_elements"):
         return empty
 
@@ -194,7 +209,7 @@ def prefix_propagation(
     paths_total = len(observed)
     paths = {p: n for p, n in observed.items() if n >= min_observations}
     if not paths:
-        return {**empty, "paths_total": paths_total, "paths_hidden": paths_total}
+        return empty.model_copy(update={"paths_total": paths_total, "paths_hidden": paths_total})
 
     node_paths: dict[int, list[tuple[int, ...]]] = {}
     node_obs: dict[int, int] = {}
@@ -243,22 +258,22 @@ def prefix_propagation(
     ]
     # Liste complète (export CSV) : plafonnée pour garder la réponse légère.
     ranked = sorted(paths.items(), key=lambda kv: (-kv[1], kv[0]))
-    return {
-        "prefix": prefix,
-        "asn": asn,
-        "start": date_from.date().isoformat() if date_from else None,
-        "end": date_to.date().isoformat() if date_to else None,
-        "nodes": nodes,
-        "edges": edges,
-        "paths": [
-            {"path": list(p), "observations": n, "valley_violation": p in violating}
+    return PropagationResponse(
+        prefix=prefix,
+        asn=asn,
+        start=date_from.date().isoformat() if date_from else None,
+        end=date_to.date().isoformat() if date_to else None,
+        nodes=[PropagationNode(**node) for node in nodes],
+        edges=[PropagationEdge.model_validate(edge) for edge in edges],
+        paths=[
+            PathRecord(path=list(p), observations=n, valley_violation=p in violating)
             for p, n in ranked[:500]
         ],
-        "moas": len(origin_rpki) > 1,
-        "paths_total": paths_total,
-        "paths_hidden": paths_total - len(paths),
-        "max_observations": max(edge_counts.values()),
-    }
+        moas=len(origin_rpki) > 1,
+        paths_total=paths_total,
+        paths_hidden=paths_total - len(paths),
+        max_observations=max(edge_counts.values()),
+    )
 
 
 REPLAY_MAX_DAYS = 7
@@ -276,6 +291,7 @@ def _utc(value: datetime | None) -> datetime | None:
 
 @router.get(
     "/prefixes/{prefix:path}/propagation/replay",
+    response_model=PropagationReplayResponse,
     summary="Rejeu de la propagation d'un préfixe sur une tranche de temps",
 )
 def prefix_propagation_replay(
@@ -287,7 +303,7 @@ def prefix_propagation_replay(
     step: int = Query(15, ge=1, le=1440, description="Pas d'une tranche, en minutes"),
     max_frames: int = Query(200, ge=10, le=500, description="Nombre maximal de tranches"),
     data: DataAccess = Depends(get_data_access),
-) -> dict[str, Any]:
+) -> PropagationReplayResponse:
     """Une tranche par pas de temps, chacune portant l'état du graphe à sa
     fin (voir ``analytics/replay.py``). Les nœuds et arêtes sont l'union de
     toutes les tranches : le client calcule une disposition unique, les
@@ -298,19 +314,17 @@ def prefix_propagation_replay(
     le pas réellement utilisé). L'état est amorcé avec ``REPLAY_WARMUP`` avant
     le début : un pair silencieux depuis plus longtemps est absent au départ.
     """
-    empty: dict[str, Any] = {
-        "prefix": prefix,
-        "asn": asn,
-        "start": None,
-        "end": None,
-        "step_minutes": step,
-        "warmup_hours": int(REPLAY_WARMUP.total_seconds() // 3600),
-        "clamped": False,
-        "nodes": [],
-        "edges": [],
-        "paths": [],
-        "frames": [],
-    }
+    empty = PropagationReplayResponse(
+        prefix=prefix,
+        asn=asn,
+        step_minutes=step,
+        warmup_hours=int(REPLAY_WARMUP.total_seconds() // 3600),
+        clamped=False,
+        nodes=[],
+        edges=[],
+        paths=[],
+        frames=[],
+    )
     if not data.exists("bgp_elements"):
         return empty
     elements = data.table("bgp_elements")
@@ -365,40 +379,48 @@ def prefix_propagation_replay(
         data, prefix, {path for f in frames for path in f.paths}, index
     )
 
-    return {
-        **empty,
-        "start": start.isoformat(),
-        "end": end.isoformat(),
-        "step_minutes": int(step_td.total_seconds() // 60),
-        "clamped": clamped,
-        "nodes": [_node(n, names, countries, origin_rpki) for n in all_nodes],
-        "edges": [
-            {
-                "source": a,
-                "target": b,
-                "relation": _RELATION_BUCKET[index.get(b, a).value],
-                "violation_observations": violations.get((a, b), 0),
-            }
+    # Chemins distincts de la fenêtre, et ceux de chaque tranche par indice : le
+    # client met en évidence exactement les chemins actifs qui traversent un AS.
+    # Au-delà de la borne, on omet la liste (`path_ids` compris) plutôt que de
+    # gonfler la réponse ; le client se rabat alors sur les liens directs de l'AS.
+    frames_out: list[ReplayFrame | ReplayFrameWithPaths] = []
+    for f in frames:
+        fields: dict[str, Any] = {
+            "ts": f.ts.isoformat(),
+            "announcements": f.announcements,
+            "withdrawals": f.withdrawals,
+            "path_count": len(f.paths),
+            "nodes": sorted({n for path in f.paths for n in path}),
+            "edges": sorted({edge_index[e] for path in f.paths for e in pairwise(path)}),
+        }
+        if with_paths:
+            frames_out.append(
+                ReplayFrameWithPaths(**fields, path_ids=sorted(path_id[p] for p in f.paths))
+            )
+        else:
+            frames_out.append(ReplayFrame(**fields))
+
+    return PropagationReplayResponse(
+        prefix=prefix,
+        asn=asn,
+        start=start.isoformat(),
+        end=end.isoformat(),
+        step_minutes=int(step_td.total_seconds() // 60),
+        warmup_hours=int(REPLAY_WARMUP.total_seconds() // 3600),
+        clamped=clamped,
+        nodes=[GraphNode(**_node(n, names, countries, origin_rpki)) for n in all_nodes],
+        edges=[
+            GraphEdge(
+                source=a,
+                target=b,
+                relation=_RELATION_BUCKET[index.get(b, a).value],
+                violation_observations=violations.get((a, b), 0),
+            )
             for a, b in all_edges
         ],
-        # Chemins distincts de la fenêtre, et ceux de chaque tranche par indice :
-        # le client met en évidence exactement les chemins actifs qui traversent
-        # un AS. Au-delà de la borne, on omet la liste plutôt que de gonfler la
-        # réponse ; le client se rabat alors sur les liens directs de l'AS.
-        "paths": distinct if with_paths else None,
-        "frames": [
-            {
-                "ts": f.ts.isoformat(),
-                "announcements": f.announcements,
-                "withdrawals": f.withdrawals,
-                "path_count": len(f.paths),
-                "nodes": sorted({n for path in f.paths for n in path}),
-                "edges": sorted({edge_index[e] for path in f.paths for e in pairwise(path)}),
-                **({"path_ids": sorted(path_id[p] for p in f.paths)} if with_paths else {}),
-            }
-            for f in frames
-        ],
-    }
+        paths=distinct if with_paths else None,
+        frames=frames_out,
+    )
 
 
 def _auto_bucket_hours(span: timedelta) -> int:
@@ -413,6 +435,7 @@ def _auto_bucket_hours(span: timedelta) -> int:
 
 @router.get(
     "/prefixes/{prefix:path}/upstreams",
+    response_model=UpstreamsResponse,
     summary="Fournisseurs amont d'un préfixe dans le temps (pairs qui le voient via chacun)",
 )
 def prefix_upstreams(
@@ -422,7 +445,7 @@ def prefix_upstreams(
     date_to: datetime | None = Query(None, alias="to"),
     bucket_hours: int | None = Query(None, ge=1, le=168, description="Pas ; auto si absent"),
     data: DataAccess = Depends(get_data_access),
-) -> dict[str, Any]:
+) -> UpstreamsResponse:
     """Pour chaque tranche de temps, le nombre de pairs (collecteur, adresse) qui
     ont annoncé le préfixe par un chemin dont l'avant-dernier AS — le voisin de
     l'origine, côté collecteur — est tel fournisseur. Un basculement de
@@ -430,13 +453,9 @@ def prefix_upstreams(
 
     Les chemins d'un seul AS (l'origine est elle-même le pair) n'ont pas de
     fournisseur amont observable et sont ignorés."""
-    empty: dict[str, Any] = {
-        "prefix": prefix,
-        "asn": asn,
-        "bucket_hours": bucket_hours or 0,
-        "upstreams": [],
-        "points": [],
-    }
+    empty = UpstreamsResponse(
+        prefix=prefix, asn=asn, bucket_hours=bucket_hours or 0, upstreams=[], points=[]
+    )
     if not data.exists("bgp_elements"):
         return empty
     elements = data.table("bgp_elements")
@@ -503,16 +522,17 @@ def prefix_upstreams(
             {"ts": cursor.isoformat(), "values": {f"as{u}": seen.get(u, 0) for u in ranked}}
         )
         cursor += timedelta(hours=hours)
-    return {
-        **empty,
-        "bucket_hours": hours,
-        "upstreams": [
-            {
-                "asn": u,
-                "as_name": (names.get(u) or (None, None))[0] or (names.get(u) or (None, None))[1],
-                "peak_peers": totals[u],
-            }
+    return UpstreamsResponse(
+        prefix=prefix,
+        asn=asn,
+        bucket_hours=hours,
+        upstreams=[
+            Upstream(
+                asn=u,
+                as_name=(names.get(u) or (None, None))[0] or (names.get(u) or (None, None))[1],
+                peak_peers=totals[u],
+            )
             for u in ranked
         ],
-        "points": points,
-    }
+        points=[UpstreamPoint.model_validate(point) for point in points],
+    )
