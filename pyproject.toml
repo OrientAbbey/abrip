@@ -13,17 +13,17 @@ authors = [{ name = "Orient Francis James Abbey Abbey" }]
 # l'environnement de référence (Python 3.12).
 dependencies = [
   "polars==2.1.0",
-  "duckdb==2.0.0",
+  "duckdb==2.0.1",
   "pyarrow==26.0.1",
   "numpy==2.5.5",
-  "fastapi==0.163.2",
+  "fastapi==0.165.0",
   "uvicorn[standard]==0.54.0",
-  "pydantic==2.14.3",
+  "pydantic==2.14.4",
   "pydantic-settings==2.16.3",
   "httpx==0.28.1",
-  "typer==0.29.1",
+  "typer==0.29.2",
   "rich==15.0.0",
-  "pyyaml==6.0.3",
+  "pyyaml==6.0.4",
   "tenacity==9.2.1",
   "orjson==3.13.0",
   "networkx==3.7",
@@ -40,7 +40,7 @@ dev = [
   # Outillage épinglé : les règles évoluent vite d'une version à l'autre, une
   # borne basse seule rend le lint et le typecheck non reproductibles (le CI
   # réinstallerait systématiquement la dernière version).
-  "ruff==0.17.5",
+  "ruff==0.17.6",
   "mypy==2.4.1",
   "pip-audit==2.10.1",
 ]
