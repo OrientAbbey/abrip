@@ -3,7 +3,7 @@
 # finale ne contient donc ni Node, ni node_modules, ni sources TypeScript.
 
 # --- étape 1 : compilation du frontend --------------------------------------
-FROM node:22-slim AS frontend
+FROM node:25-slim AS frontend
 
 WORKDIR /build
 COPY frontend/package.json frontend/package-lock.json ./
