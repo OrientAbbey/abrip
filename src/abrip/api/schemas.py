@@ -6,30 +6,50 @@ doit pas exposer la forme des tables ni changer quand le stockage change.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
 
 
-class Page[T](BaseModel):
+def _serialize_datetimes(value: Any) -> Any:
+    """Sérialise tous les datetimes comme des instants UTC explicites."""
+    if isinstance(value, datetime):
+        aware = value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+        return aware.isoformat().replace("+00:00", "Z")
+    if isinstance(value, dict):
+        return {key: _serialize_datetimes(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_serialize_datetimes(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_serialize_datetimes(item) for item in value)
+    return value
+
+
+class ApiModel(BaseModel):
+    @field_serializer("*", when_used="json", check_fields=False)
+    def serialize_datetimes(self, value: Any) -> Any:
+        return _serialize_datetimes(value)
+
+
+class Page[T](ApiModel):
     items: list[T]
     total: int
     limit: int
     offset: int
 
 
-class ErrorBody(BaseModel):
+class ErrorBody(ApiModel):
     code: str
     message: str
     details: dict[str, Any] = Field(default_factory=dict)
 
 
-class ErrorResponse(BaseModel):
+class ErrorResponse(ApiModel):
     error: ErrorBody
 
 
-class LayerStatus(BaseModel):
+class LayerStatus(ApiModel):
     name: str
     present: bool
     rows: int | None = None
@@ -37,7 +57,7 @@ class LayerStatus(BaseModel):
     newest: str | None = None
 
 
-class Health(BaseModel):
+class Health(ApiModel):
     status: str
     version: str
     generated_at: datetime
@@ -45,7 +65,7 @@ class Health(BaseModel):
     last_run: dict[str, Any] | None = None
 
 
-class CollectorInfo(BaseModel):
+class CollectorInfo(ApiModel):
     name: str
     project: str
     location: str
@@ -55,7 +75,7 @@ class CollectorInfo(BaseModel):
     last_file_ts: datetime | None = None
 
 
-class Overview(BaseModel):
+class Overview(ApiModel):
     window_from: str | None
     window_to: str | None
     prefixes_tracked: int
@@ -67,7 +87,7 @@ class Overview(BaseModel):
     top_unstable_prefixes: list[dict[str, Any]]
 
 
-class AsnSummary(BaseModel):
+class AsnSummary(ApiModel):
     asn: int
     country_iso2: str | None = None
     is_african: bool = False
@@ -79,7 +99,7 @@ class AsnSummary(BaseModel):
     open_events: int = 0
 
 
-class PrefixSummary(BaseModel):
+class PrefixSummary(ApiModel):
     prefix: str
     origin_asn: int | None = None
     country_iso2: str | None = None
@@ -89,19 +109,19 @@ class PrefixSummary(BaseModel):
     open_events: int = 0
 
 
-class TimePoint(BaseModel):
+class TimePoint(ApiModel):
     ts: datetime
     values: dict[str, float | int | None]
 
 
-class Series(BaseModel):
+class Series(ApiModel):
     metric: str
     granularity: str
     subject: str
     points: list[TimePoint]
 
 
-class EventOut(BaseModel):
+class EventOut(ApiModel):
     event_id: str
     detector: str
     severity: str
@@ -120,7 +140,7 @@ class EventOut(BaseModel):
     dataplane_evidence: dict[str, Any] = Field(default_factory=dict)
 
 
-class SearchHit(BaseModel):
+class SearchHit(ApiModel):
     kind: str
     value: str
     label: str

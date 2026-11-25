@@ -147,14 +147,14 @@ def visibility_series(
     _window_filter("snapshot_ts", date_from, date_to, conditions, params)
 
     where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
-    aggregate = "avg(visibility_ratio)" if not prefix else "any_value(visibility_ratio)"
+    aggregate = "round(avg(visibility_ratio), 6)" if not prefix else "any_value(visibility_ratio)"
     rows = data.query(
         f"""
         SELECT snapshot_ts AS ts,
                {aggregate} AS visibility_ratio,
-               avg(visibility_local) AS visibility_local,
-               avg(visibility_external) AS visibility_external,
-               avg(median_path_len) AS median_path_len,
+               round(avg(visibility_local), 6) AS visibility_local,
+               round(avg(visibility_external), 6) AS visibility_external,
+               round(avg(median_path_len), 6) AS median_path_len,
                count(DISTINCT prefix) AS prefixes
         FROM {source}
         {where}

@@ -96,9 +96,9 @@ def list_asns(
         up_by_asn = {
             int(r["origin_asn"]): r
             for r in data.query(
-                f"""SELECT origin_asn, any_value(upstream_count) AS upstream_count,
-                           any_value(primary_upstream) AS primary_upstream,
-                           avg(hhi_transit) AS hhi_transit
+                f"""SELECT origin_asn, arg_max(upstream_count, window_start) AS upstream_count,
+                           arg_max(primary_upstream, window_start) AS primary_upstream,
+                           round(avg(hhi_transit), 6) AS hhi_transit
                     FROM {upstream} WHERE origin_asn IN ({placeholders}) GROUP BY 1""",
                 asns,
             )
@@ -241,7 +241,7 @@ def list_prefixes(
         visibility = {
             r["prefix"]: float(r["v"])
             for r in data.query(
-                f"""SELECT prefix, avg(visibility_ratio) AS v
+                f"""SELECT prefix, round(avg(visibility_ratio), 6) AS v
                     FROM {data.table("metric_visibility")}
                     WHERE prefix IN ({placeholders}) GROUP BY 1""",
                 [r["prefix"] for r in rows],
@@ -329,19 +329,19 @@ def countries(data: DataAccess = Depends(get_data_access)) -> list[dict]:
     rpki_join = ""
     rpki_select = "NULL AS rpki_coverage_ratio"
     if data.exists("metric_rpki_coverage"):
-        rpki_select = "avg(r.rpki_coverage_ratio) AS rpki_coverage_ratio"
+        rpki_select = "round(avg(r.rpki_coverage_ratio), 6) AS rpki_coverage_ratio"
         rpki_join = (
             f"LEFT JOIN {data.table('metric_rpki_coverage')} r ON r.country_iso2 = c.country_iso2"
         )
     return data.query(
         f"""SELECT c.country_iso2 AS country_iso2,
-                   avg(c.transit_dependency_ratio) AS transit_dependency_ratio,
-                   avg(c.avg_hhi_transit) AS hhi_transit,
-                   avg(c.avg_upstream_count) AS avg_upstream_count,
+                   round(avg(c.transit_dependency_ratio), 6) AS transit_dependency_ratio,
+                   round(avg(c.avg_hhi_transit), 6) AS hhi_transit,
+                   round(avg(c.avg_upstream_count), 6) AS avg_upstream_count,
                    max(c.asns_observed) AS asns_observed,
-                   avg(c.avg_visibility) AS avg_visibility,
+                   round(avg(c.avg_visibility), 6) AS avg_visibility,
                    max(c.prefixes_visible) AS prefixes_visible,
-                   avg(c.coverage_ratio) AS coverage_ratio,
+                   round(avg(c.coverage_ratio), 6) AS coverage_ratio,
                    {rpki_select}
             FROM {data.table("metric_country")} c
             {rpki_join}

@@ -1,0 +1,144 @@
+# Suivi détaillé des modifications ABRIP
+
+Ce fichier est le carnet d’exécution des améliorations listées dans `docs/ameliorations-proposees.md`. Une case n’est cochée qu’après vérification réelle ; les points non faits restent ouverts avec leur raison.
+
+## Lot 1 — Correctifs fonctionnels et fiabilité — **terminé**
+
+### 1.1 Historique des métriques
+- [x] Schémas et colonnes temporelles confirmés : toutes les métriques portent `window_start`, sauf `metric_visibility` (`snapshot_ts`), d’où la détection automatique de la colonne de temps.
+- [x] Disposition retenue : `data/analytics/<métrique>/date=AAAA-MM-JJ/part-*.parquet`, comme `analytics/daily.py`.
+- [x] Écriture d’une partition par jour : `_persist` (`src/abrip/analytics/metrics.py`) regroupe la trame par date UTC avant écriture et ne touche qu’aux jours présents dans la trame.
+- [x] Idempotence conservée : `write_frame` remplace atomiquement la partition du jour ; une trame vide renvoie `0` sans rien écrire.
+- [x] Anciennes tables plates migrées : les fichiers à la racine sont relus, répartis par jour, réécrits en partitions, puis supprimés seulement après succès.
+- [x] Lecture API adaptée : `src/abrip/api/deps.py` utilise `metric_*/**/*.parquet` (le motif couvre aussi d’éventuels anciens fichiers plats). `DataAccess.exists` utilisait déjà `rglob`.
+- [x] Test de régression : `tests/test_metrics_persistence.py` (calcul multi-jours, recalcul d’un seul jour, migration d’une table plate, motif API).
+- [x] Catalogue vérifié : `register_partition` fait un `ON CONFLICT (partition_key) DO UPDATE`, donc une réécriture de jour ne duplique pas la ligne.
+- [x] Démonstration et détection vérifiées : `abrip demo bootstrap --force` puis `abrip demo verify` (rappel 1.0, 5/5) ; les métriques sont bien écrites en 7 partitions journalières.
+
+### 1.2 Pagination de la liste des AS
+- [x] `frontend/src/pages/AsnList.tsx` ne supprime plus `offset` lors des changements de page.
+- [x] Logique extraite dans `frontend/src/lib/searchParams.ts` : `withFilter` réinitialise la pagination, `withOffset` la conserve.
+- [x] `Prefixes.tsx` aligné sur la même aide, pour que les deux listes ne divergent plus.
+- [x] Tests Vitest : `frontend/src/lib/searchParams.test.ts` (page suivante, retour, remise à zéro après filtre, vidage de filtre).
+- [x] `npm test` (11 tests), `npm run typecheck` et `npm run build` passent.
+
+### 1.3 Horodatages UTC
+- [x] Sémantique établie : DuckDB et les générateurs produisent des datetimes **naïfs** exprimés en UTC.
+- [x] Sérialisation explicite des schémas typés : `ApiModel` + `_serialize_datetimes` (`src/abrip/api/schemas.py`) ajoutent `Z` (ou ramènent un offset à UTC), y compris dans les objets imbriqués et `details`/`last_run`.
+- [x] Endpoints typés vérifiés : `Health`, `LayerStatus`, `Series`, `TimePoint`, `EventOut`, `Page`.
+- [x] Frontend : `parseUtc` (`frontend/src/lib/format.ts`) traite une valeur naïve comme UTC, une date seule comme minuit UTC, et respecte un `Z`/offset explicite.
+- [x] Composants alignés : `TimeChart`, `EventDetail` et `PropagationReplay` utilisent `parseUtc` au lieu d’un `new Date(...)` local.
+- [x] Tests backend : `tests/test_schemas.py` (naïf, offset non UTC, imbrication, `last_run`).
+- [x] Tests frontend : `frontend/src/lib/format.test.ts`.
+- [x] Limite connue et acceptée : les quelques endpoints qui renvoient des `dict` ad hoc (statistiques de préfixe, séries DuckDB) gardent des datetimes sans suffixe ; le frontend les interprète désormais comme UTC. Un passage systématique par des schémas typés reste souhaitable (voir section 3).
+- [x] `npm run typecheck`, `npm test` et la suite API passent.
+
+### 1.4 Pagination du broker BGPKIT
+- [x] Forme de la réponse vérifiée : `{"data": [...], "total": ...}` ; `page` et `page_size` sont des paramètres documentés (maximum 1 000 par page).
+- [x] `_search_pages` (`src/abrip/ingestion/broker.py`) parcourt les pages jusqu’à épuisement (`total` atteint, page incomplète ou vide), avec `MAX_PAGES` comme garde-fou.
+- [x] Filtres, retries (`_query`), repli archive et tri final conservés.
+- [x] Échec en cours de pagination : l’exception remonte à `search`, qui journalise et bascule sur `build_archive_urls` — aucune récupération partielle silencieuse.
+- [x] Doublons d’URL dédupliqués entre pages.
+- [x] Tests : `tests/test_broker.py` (pages complètes avec `total`, dernière page incomplète sans `total`, doublons).
+- [x] Suite d’ingestion ciblée et tests complets passent.
+
+### 1.5 Curation à mémoire bornée (RIB et PCH)
+- [x] `_curate_rib` (`src/abrip/etl/curate.py`) écrit via `ParquetBatchWriter` dans un dossier temporaire puis remplace la partition : plus d’accumulation en mémoire.
+- [x] Schéma, noms de partitions, horodatages, compteur et enregistrement catalogue préservés.
+- [x] Idempotence conservée : remplacement atomique, suppression du temporaire si aucune ligne.
+- [x] `PchTextDumpParser.parse` (`src/abrip/etl/pch_parser.py`) lit l’en-tête dans les 20 premières lignes puis itère le fichier en flux (`chain`), sans `readlines()`.
+- [x] Tests : `tests/test_curate_rib.py` (plusieurs lots, remplacement) et `tests/test_pch_parser.py` (relevé de 5 000 routes consommé en générateur, préambule non interprété, fichier sans en-tête).
+- [x] `abrip demo verify` toujours à 5/5 après recuration complète.
+
+### 1.6 Validation RPKI par couples distincts
+- [x] `compute_rpki_coverage` (`src/abrip/analytics/metrics.py`) appelle `RpkiValidator.validate_frame`.
+- [x] Statuts vérifiés : `valid`, `invalid`, `not-found` ; sans ROA, tout est `not-found`.
+- [x] Agrégations pays et compteurs de préfixes distincts inchangés.
+- [x] Tests : `tests/test_metrics_rpki.py` (annonces répétées, MOAS, préfixe sans ROA, absence de ROA) avec équivalence explicite vis-à-vis de la validation ligne à ligne.
+- [x] Pas de benchmark séparé : la démonstration complète sert de mesure de bout en bout (bootstrap + verify).
+
+### 1.7 Stabilité des agrégats multi-partitions (découvert pendant la vérification)
+- [x] Cause identifiée : `any_value(primary_upstream)` choisissait une ligne arbitraire parmi les jours de `metric_upstream`, et les moyennes de ratios sommées sur plusieurs fichiers pouvaient varier d’un ULP. Les tests d’équivalence des tables journalières comparaient deux appels identiques et échouaient par intermittence (8 tests).
+- [x] `explore.py` : `arg_max(..., window_start)` pour `upstream_count` et `primary_upstream` (valeur du jour le plus récent, déterministe).
+- [x] Ratios agrégés arrondis à 6 décimales dans les réponses (`/prefixes`, `/countries`, séries de visibilité), bien au-delà de la précision affichée.
+- [x] Vérification : `tests/test_tables_journalieres.py` passe (316 tests), et les listes AS/préfixes restent stables sur trois exécutions consécutives.
+
+## Lot 2 — Garde-fous de qualité
+
+### 2.1 Formatage Ruff en CI — **fait**
+- [x] `.github/workflows/ci.yml` exécute `ruff format --check src tests`.
+- [x] `uv run --locked ruff format --check src tests` passe localement (84 fichiers) et `ruff check src tests` aussi.
+- [x] Le workflow YAML a été validé syntaxiquement (parsing `yaml.safe_load`).
+
+### 2.2 Couverture Python — **fait**
+- [x] Couverture mesurée sur la suite complète : **81,03 %** (4 633 instructions, 879 non couvertes, 743 tests exécutés).
+- [x] Seuil fixé à **80 %** dans `pyproject.toml` (`[tool.coverage.report] fail_under`), soit un peu sous la mesure.
+- [x] CI : `pytest --cov=abrip --cov-report=term-missing --cov-report=xml:coverage.xml` ; l’étape échoue sous 80 %.
+- [x] Rapport XML publié comme artefact (`actions/upload-artifact`, même en cas d’échec) ; `coverage.xml` ajouté au `.gitignore`.
+- [x] Vérification locale : `coverage report` applique le seuil et sort en succès à 81,03 %.
+- [x] Note : la mesure complète prend ~26 min sur ce poste (tests de démonstration compris) ; la CI la parallélise mieux mais reste le poste le plus long.
+
+### 2.3 Tests frontend — **fait, sauf smoke test navigateur**
+- [x] Configuration vérifiée : Vite 8, TypeScript 7, npm, aucun test existant.
+- [x] Vitest 5.1.2 ajouté en dépendance exacte et script `npm test`.
+- [x] Tests des fonctions pures : `format.test.ts` (UTC) et `searchParams.test.ts` (pagination).
+- [x] Régression de pagination couverte par `searchParams.test.ts`, y compris le cas « changer d’offset ».
+- [x] Tests intégrés à la CI (`npm test` avant le typecheck et le build).
+- [x] `npm test` (11 tests), `npm run typecheck`, `npm run build` passent.
+- [ ] Smoke test Playwright : **reporté**. Il demande un navigateur et un serveur de démonstration dans la CI ; le coût (installation Chromium, démarrage de l’API, données) dépasse ce lot. Les parcours critiques restent couverts par les tests API et le build. À planifier avec les tests d’accessibilité (section 4).
+
+### 2.4 Audit et veille des dépendances — **fait**
+- [x] Dependabot configuré (`.github/dependabot.yml`) pour `uv`, `npm`, GitHub Actions et Docker, mises à jour hebdomadaires groupées (mensuelles pour les Actions et l’image).
+- [x] `pip-audit==2.10.1` ajouté au groupe dev et exécuté en CI ; localement : « No known vulnerabilities found ».
+- [x] `npm audit --audit-level=high` ajouté à la CI ; localement, `npm install` rapporte 0 vulnérabilité.
+- [x] Aucun faux positif constaté ; le paquet local `abrip` est simplement ignoré par `pip-audit` (absent de PyPI).
+
+### 2.5 Installation Docker reproductible — **modifié, non construit localement**
+- [x] `Dockerfile` : `uv==0.13.1` installé puis `uv sync --locked --no-dev`, sans cache conservé, `PATH` pointant sur `/app/.venv/bin`.
+- [x] Étapes, utilisateur non-root, healthcheck et point d’entrée inchangés.
+- [x] `uv.lock` copié dans l’image et verrouillage réellement utilisé (`--locked` échoue si le verrou diverge).
+- [ ] Construction de l’image : **non exécutée**, Docker n’est pas installé sur ce poste (`docker` introuvable). Le job CI `image` la validera au premier passage.
+
+### 2.6 Pre-commit — **fait**
+- [x] Configuration légère `.pre-commit-config.yaml` en hooks `local` : Ruff lint (avec `--fix`), Ruff format et Mypy.
+- [x] Mêmes versions/options que la CI (outils du `pyproject.toml`, `uv run --locked`).
+- [x] Installation documentée en tête du fichier (`pipx install pre-commit` puis `pre-commit install`).
+- [x] Aucun téléchargement implicite d’environnement : les hooks réutilisent l’environnement `uv` du projet.
+
+## Vérification finale du lot 1 + 2
+
+| Vérification | Résultat |
+|---|---|
+| `uv run --locked ruff check src tests` | OK |
+| `uv run --locked ruff format --check src tests` | OK (84 fichiers) |
+| `uv run --locked mypy src` | OK (51 fichiers) |
+| Tests Python ciblés (persistance, schémas, broker, RPKI, curation, PCH, API) | OK |
+| Suite Python complète | 735 réussis, 8 échecs d’équivalence corrigés en 1.7 ; fichiers API/tableaux rejoués après correction : 316 + 216 réussis |
+| Couverture Python | 81,03 % (seuil CI 80 %) |
+| `npm test` | 11 tests OK |
+| `npm run typecheck` | OK |
+| `npm run build` | OK |
+| Budget gzip mesuré | 245 163 octets (plafond 256 000) |
+| `abrip demo verify` | rappel 1.0, 5/5 |
+| Construction Docker | non testée localement (Docker absent) |
+
+## Journal d’exécution
+
+| Date | Étape | Fichiers/zone | Vérifications et résultat |
+|---|---|---|---|
+| 2026-11-25 | Plan et suivi rédigés | `docs/ameliorations-proposees.md`, `docs/suivi-modifications.md` | — |
+| 2026-11-25 | Métriques partitionnées par jour | `analytics/metrics.py`, `api/deps.py`, `tests/test_metrics_persistence.py` | 3 tests OK ; bootstrap + verify 5/5 ; 7 partitions par métrique |
+| 2026-11-25 | Pagination et fuseau UTC frontend | `AsnList.tsx`, `Prefixes.tsx`, `searchParams.ts`, `format.ts`, `TimeChart.tsx`, `EventDetail.tsx`, `PropagationReplay.tsx` | 11 tests Vitest, typecheck et build OK |
+| 2026-11-25 | UTC côté API | `api/schemas.py`, `tests/test_schemas.py` | 4 tests OK |
+| 2026-11-25 | Pagination broker | `ingestion/broker.py`, `tests/test_broker.py` | 3 tests OK |
+| 2026-11-25 | Curation bornée | `etl/curate.py`, `etl/pch_parser.py`, `tests/test_curate_rib.py`, `tests/test_pch_parser.py` | 12 tests OK |
+| 2026-11-25 | RPKI vectorisée | `analytics/metrics.py`, `tests/test_metrics_rpki.py` | 2 tests OK |
+| 2026-11-25 | Garde-fous CI | `ci.yml`, `dependabot.yml`, `.pre-commit-config.yaml`, `Dockerfile`, `Makefile`, frontend | YAML valide ; `pip-audit` sans vulnérabilité |
+| 2026-11-25 | Couverture mesurée | `pyproject.toml`, `ci.yml`, `.gitignore` | 81,03 % ; seuil 80 % ; `coverage report` sort en succès |
+| 2026-11-25 | Stabilité des agrégats | `api/routers/explore.py`, `api/routers/metrics.py` | 316 tests d’équivalence OK, trois exécutions stables |
+
+## Bilan
+
+- **Lot 1 :** terminé et vérifié (seule réserve : les réponses `dict` ad hoc conservent des datetimes naïfs, interprétés comme UTC par le frontend).
+- **Lot 2 :** formatage, couverture, tests frontend, audits, Dependabot, pre-commit et Dockerfile faits. Restent deux vérifications d’environnement : construction de l’image Docker (Docker absent du poste, job CI dédié) et smoke test navigateur Playwright (reporté, documenté).
+- **Points reportés :** sections 3 et 4 de `docs/ameliorations-proposees.md`.

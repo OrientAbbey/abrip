@@ -8,7 +8,7 @@ import { DateRangeSelector, type DateRange } from "../components/DateRangeSelect
 import { AsyncBlock } from "../components/StateBlock";
 import { ConfidenceBadge, DataplaneVerdictBadge, ScoreBar, SeverityBadge } from "../components/Badges";
 import { PALETTE, TimeChart } from "../components/TimeChart";
-import { countryLabel, detectorLabel, dt, num } from "../lib/format";
+import { countryLabel, detectorLabel, dt, num, parseUtc } from "../lib/format";
 
 /** Rend une preuve brute lisible : les détecteurs déposent des structures de
  *  formes différentes, on les affiche telles quelles plutôt que d'en cacher
@@ -97,7 +97,7 @@ const DATAPLANE_LABEL: Record<string, string> = {
 /** Lien vers le rejeu de propagation centré sur l'événement : de 2 h avant sa
  *  première observation à 2 h après la dernière (le rejeu est limité à 7 jours). */
 function propagationLink(prefix: string, firstSeen: string, lastSeen: string): string {
-  const utc = (ts: string) => Date.parse(ts.endsWith("Z") || ts.includes("+") ? ts : `${ts}Z`);
+  const utc = (ts: string) => parseUtc(ts);
   const local = (ms: number) => new Date(ms).toISOString().slice(0, 16);
   const hour = 3600 * 1000;
   const query = new URLSearchParams({

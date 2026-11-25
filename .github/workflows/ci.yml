@@ -23,8 +23,14 @@ jobs:
       - name: Installer le projet depuis le verrou
         run: uv sync --locked --all-extras
 
+      - name: Audit des dépendances Python
+        run: uv run --locked pip-audit --progress-spinner off
+
       - name: Linter
         run: uv run --locked ruff check src tests
+
+      - name: Formatage
+        run: uv run --locked ruff format --check src tests
 
       - name: Vérification de types
         run: uv run --locked mypy src
@@ -38,7 +44,19 @@ jobs:
         run: uv run --locked abrip demo verify
 
       - name: Tests
-        run: uv run --locked pytest -q
+        run: >
+          uv run --locked pytest -q --cov=abrip
+          --cov-report=term-missing --cov-report=xml:coverage.xml
+
+      # Le rapport XML est conservé même si les tests échouent : il permet de
+      # voir ce qui a régressé sans relancer la suite localement.
+      - name: Conserver le rapport de couverture
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.xml
+          if-no-files-found: ignore
 
   frontend:
     name: Compilation du frontend
@@ -56,6 +74,12 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - run: npm ci
+
+      - name: Audit des dépendances npm
+        run: npm audit --audit-level=high
+
+      - name: Tests frontend
+        run: npm test
 
       - name: Vérification de types
         run: npm run typecheck

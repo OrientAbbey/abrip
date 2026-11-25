@@ -28,6 +28,7 @@ import {
   YAxis,
 } from "recharts";
 import type { TimePoint } from "../lib/types";
+import { parseUtc } from "../lib/format";
 
 export const PALETTE = {
   ink: "#1d3b52",
@@ -102,7 +103,7 @@ export function TimeChart({
     return <p className="muted">Pas de point à afficher sur cette fenêtre.</p>;
   }
 
-  const rows = points.map((p) => ({ t: new Date(p.ts).getTime(), ...p.values }));
+  const rows = points.map((p) => ({ t: parseUtc(p.ts), ...p.values }));
   const labels = Object.fromEntries(series.map((s) => [s.key, s.label]));
 
   return (
@@ -154,7 +155,7 @@ export function TimeChart({
           {markers.map((m, i) => (
             <ReferenceLine
               key={i}
-              x={new Date(m.ts).getTime()}
+              x={parseUtc(m.ts)}
               stroke={PALETTE.crimson}
               strokeDasharray="4 3"
               label={{ value: m.label, position: "insideTopRight", fill: PALETTE.crimson, fontSize: 11 }}

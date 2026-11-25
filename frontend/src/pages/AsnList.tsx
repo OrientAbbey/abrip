@@ -5,6 +5,7 @@ import { AsnLink } from "../components/AsnLink";
 import { AsyncBlock, EmptyState } from "../components/StateBlock";
 import { Term } from "../components/Term";
 import { countryLabel, dec, num } from "../lib/format";
+import { withFilter, withOffset } from "../lib/searchParams";
 
 const PAGE_SIZE = 25;
 
@@ -26,11 +27,7 @@ export default function AsnList() {
   });
 
   const update = (key: string, value: string) => {
-    const next = new URLSearchParams(params);
-    if (value) next.set(key, value);
-    else next.delete(key);
-    next.delete("offset");
-    setParams(next);
+    setParams(withFilter(params, key, value));
   };
 
   return (
@@ -131,13 +128,13 @@ export default function AsnList() {
                 <span className="row">
                   <button
                     disabled={page.offset === 0}
-                    onClick={() => update("offset", String(Math.max(0, page.offset - PAGE_SIZE)))}
+                    onClick={() => setParams(withOffset(params, Math.max(0, page.offset - PAGE_SIZE)))}
                   >
                     Précédent
                   </button>
                   <button
                     disabled={page.offset + page.limit >= page.total}
-                    onClick={() => update("offset", String(page.offset + PAGE_SIZE))}
+                    onClick={() => setParams(withOffset(params, page.offset + PAGE_SIZE))}
                   >
                     Suivant
                   </button>

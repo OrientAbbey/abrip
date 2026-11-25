@@ -21,13 +21,22 @@ export const pct = (value: number | null | undefined): string =>
 export const dec = (value: number | null | undefined, digits = 2): string =>
   value === null || value === undefined ? "—" : value.toFixed(digits);
 
+const ZONE = /(?:Z|[+-]\d{2}:?\d{2})$/i;
+
+/** L'API date en UTC, souvent sans suffixe. Ne jamais laisser le navigateur
+ *  interpréter une valeur naïve dans son fuseau local. */
+export const parseUtc = (value: string): number => {
+  const iso = ZONE.test(value) ? value : value.length === 10 ? `${value}T00:00:00Z` : `${value}Z`;
+  return Date.parse(iso);
+};
+
 /** Les horodatages de la plateforme sont en UTC ; on le dit au lieu de
  *  convertir silencieusement vers le fuseau du navigateur. */
 export const dt = (value: string | null | undefined): string =>
-  value ? `${DATETIME.format(new Date(value))} UTC` : "—";
+  value ? `${DATETIME.format(new Date(parseUtc(value)))} UTC` : "—";
 
 export const day = (value: string | null | undefined): string =>
-  value ? DATE.format(new Date(value)) : "—";
+  value ? DATE.format(new Date(parseUtc(value))) : "—";
 
 export const SEVERITY_LABEL: Record<string, string> = {
   critical: "critique",

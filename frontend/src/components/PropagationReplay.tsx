@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useApi } from "../lib/useApi";
-import { detectorLabel } from "../lib/format";
+import { detectorLabel, parseUtc } from "../lib/format";
 import type { EventOut, Page } from "../lib/types";
 import { SeverityBadge } from "./Badges";
 import { AsyncBlock } from "./StateBlock";
@@ -265,8 +265,8 @@ function ReplayPlayer({
   const markers = useMemo(
     () =>
       (events.data?.items ?? []).map((ev) => {
-        const t = Date.parse(ev.first_seen.endsWith("Z") ? ev.first_seen : `${ev.first_seen}Z`);
-        const found = body.frames.findIndex((f) => Date.parse(f.ts) >= t);
+        const t = parseUtc(ev.first_seen);
+        const found = body.frames.findIndex((f) => parseUtc(f.ts) >= t);
         return { event: ev, index: found === -1 ? last : found };
       }),
     [events.data, body.frames, last],

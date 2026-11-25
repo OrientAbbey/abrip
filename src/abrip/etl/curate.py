@@ -8,6 +8,7 @@ autorise à relancer le pipeline sans réfléchir après un incident.
 from __future__ import annotations
 
 import gc
+import shutil
 from collections import defaultdict
 from collections.abc import Iterable, Iterator
 from datetime import date, datetime, timedelta
@@ -147,54 +148,65 @@ def curate_day(
 def _curate_rib(
     settings: Settings, catalog: Catalog, day: date, collector: str, run_id: str, synthetic: bool
 ) -> int:
-    """Construit ``rib_snapshots`` (photographies de table de routage)."""
+    """Construit ``rib_snapshots`` (photographies de table de routage) par lots."""
     target = partition_path(
         settings.curated_dir, "rib_snapshots", date=day.isoformat(), collector=collector
     )
-    rows: list[dict] = []
+    # Écriture dans un dossier temporaire puis remplacement : un incident de
+    # parsing ne laisse pas une partition à moitié réécrite.
+    tmp = target.parent / f".{target.name}.tmp"
+    shutil.rmtree(tmp, ignore_errors=True)
 
-    if synthetic:
-        from abrip.demo.generator import generate_rib
+    with ParquetBatchWriter(
+        tmp,
+        RIB_SNAPSHOT_SCHEMA,
+        batch_rows=settings.etl.batch_rows,
+        compression=settings.etl.compression,
+    ) as writer:
+        if synthetic:
+            from abrip.demo.generator import generate_rib
 
-        for hour in (0, 8, 16):
-            snapshot = datetime.combine(day, datetime.min.time()) + timedelta(hours=hour)
-            rows.extend(generate_rib(collector, snapshot))
-    else:
-        rib_files = [
-            (p, c) for p, c, t in _raw_files(settings, day, [collector]) if t in ("rib", "ribs")
-        ]
-        parser = _parser_for(settings, collector)
-        for path, _ in rib_files:
-            snapshot = datetime.combine(day, datetime.min.time())
-            for record in parser.parse(path, collector):
-                if record["elem_type"] != "R":
-                    continue
-                rows.append(
-                    {
-                        "snapshot_ts": record["ts"] or snapshot,
-                        "collector": collector,
-                        "peer_asn": record["peer_asn"],
-                        "prefix": record["prefix"],
-                        "prefix_ip_version": record["prefix_ip_version"],
-                        "prefix_len": record["prefix_len"],
-                        "origin_asn": record["origin_asn"],
-                        "as_path_dedup": record["as_path_dedup"],
-                        "as_path_len": record["as_path_len"],
-                    }
-                )
+            for hour in (0, 8, 16):
+                snapshot = datetime.combine(day, datetime.min.time()) + timedelta(hours=hour)
+                writer.extend(generate_rib(collector, snapshot))
+        else:
+            rib_files = [
+                (p, c) for p, c, t in _raw_files(settings, day, [collector]) if t in ("rib", "ribs")
+            ]
+            parser = _parser_for(settings, collector)
+            for path, _ in rib_files:
+                snapshot = datetime.combine(day, datetime.min.time())
+                for record in parser.parse(path, collector):
+                    if record["elem_type"] != "R":
+                        continue
+                    writer.add(
+                        {
+                            "snapshot_ts": record["ts"] or snapshot,
+                            "collector": collector,
+                            "peer_asn": record["peer_asn"],
+                            "prefix": record["prefix"],
+                            "prefix_ip_version": record["prefix_ip_version"],
+                            "prefix_len": record["prefix_len"],
+                            "origin_asn": record["origin_asn"],
+                            "as_path_dedup": record["as_path_dedup"],
+                            "as_path_len": record["as_path_len"],
+                        }
+                    )
 
-    if not rows:
+    if not writer.rows_written:
+        shutil.rmtree(tmp, ignore_errors=True)
         return 0
-    frame = pl.DataFrame(rows, schema=RIB_SNAPSHOT_SCHEMA, strict=False)
-    write_frame(frame, target)
+
+    shutil.rmtree(target, ignore_errors=True)
+    tmp.replace(target)
     catalog.register_partition(
         "rib_snapshots",
         str(target),
-        frame.height,
+        writer.rows_written,
         sum(f.stat().st_size for f in target.glob("*.parquet")),
         run_id,
     )
-    return frame.height
+    return writer.rows_written
 
 
 def curate_ris_live_window(
