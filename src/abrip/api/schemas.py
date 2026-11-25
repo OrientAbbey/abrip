@@ -198,3 +198,136 @@ class CountryRelationships(ApiModel):
     providers: list[CountryRelation] = Field(default_factory=list)
     customers: list[CountryRelation] = Field(default_factory=list)
     peers: list[CountryRelation] = Field(default_factory=list)
+
+
+class PrefixFacets(ApiModel):
+    """Comptes exacts par famille d'adresses et par statut, sur une plage."""
+
+    ip_version: dict[str, int]
+    status: dict[str, int]
+
+
+class PrefixRow(ApiModel):
+    prefix: str
+    origin_asn: int
+    ip_version: int
+    active: bool
+    status: str
+    first_seen: datetime
+    last_seen: datetime
+    days_active: int
+    days_total: int
+    rpki_status: str
+    irr_status: str
+
+
+class NeighbourRow(ApiModel):
+    asn: int
+    type: str
+    ipv4: bool
+    ipv6: bool
+    first_seen: datetime
+    last_seen: datetime
+    history: list[str]
+    active_now: bool
+    status: str
+    country_iso2: str | None = None
+
+
+class CountryNeighbourRow(NeighbourRow):
+    member_asn: int
+
+
+class NeighboursResponse(ApiModel):
+    asn: int
+    days: list[str]
+    counts: dict[str, int]
+    status_counts: dict[str, int]
+    items: list[NeighbourRow]
+
+
+class CountryNeighboursResponse(ApiModel):
+    country_iso2: str
+    days: list[str]
+    counts: dict[str, int]
+    status_counts: dict[str, int]
+    items: list[CountryNeighbourRow]
+
+
+class HistoryRow(ApiModel):
+    prefix: str
+    origin: int
+    first_seen: str | None = None
+    last_seen: str | None = None
+    change: str
+    active: bool
+    match: bool
+
+
+class RoaHistoryRow(HistoryRow):
+    trust_anchor: str | None = None
+    max_length: int | None = None
+
+
+class RouteHistoryRow(HistoryRow):
+    source: str | None = None
+
+
+class HistoryResponse[T](ApiModel):
+    prefix: str
+    specified_asn: int
+    rows: list[T]
+
+
+class RoaHistoryResponse(HistoryResponse):
+    rows: list[RoaHistoryRow]
+
+
+class RouteHistoryResponse(HistoryResponse):
+    rows: list[RouteHistoryRow]
+
+
+class PeriodRun(ApiModel):
+    first_seen: str
+    last_seen: str
+    days: int
+    observations: int
+    active: bool
+
+
+class PeriodPresence(ApiModel):
+    first_seen: str
+    last_seen: str
+    days: int
+    active: bool
+
+
+class DailyObservation(ApiModel):
+    day: str
+    observations: int
+
+
+class DailyPresence(ApiModel):
+    day: str
+    ipv4: bool
+    ipv6: bool
+
+
+class PrefixHistoryResponse(ApiModel):
+    asn: int
+    prefix: str
+    start: str | None = None
+    end: str | None = None
+    items: list[PeriodRun] = Field(default_factory=list)
+    daily: list[DailyObservation] = Field(default_factory=list)
+
+
+class NeighbourHistoryResponse(ApiModel):
+    asn: int
+    neighbour: int
+    type: str
+    start: str | None = None
+    end: str | None = None
+    ipv4: list[PeriodPresence] = Field(default_factory=list)
+    ipv6: list[PeriodPresence] = Field(default_factory=list)
+    daily: list[DailyPresence] = Field(default_factory=list)

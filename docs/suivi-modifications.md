@@ -127,8 +127,15 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 - [x] `CountryRelation` et `CountryRelationships` sur `/countries/{iso2}/relationships`, avec listes ordonnées inchangées.
 - [x] Vérification : `test_api_contrat_schemas.py` exige le suffixe `Z` sur `first_seen`/`last_seen` des incidents ; les tests existants de relations passent sans changement.
 
+### 3.3 Tableaux et historiques de l’explorateur — **fait**
+- [x] `PrefixRow` sur `/asns/{asn}/prefixes` et `/countries/{iso2}/prefixes` : `first_seen`/`last_seen` passent en UTC explicite (`Z`), les comptes de jours et statuts restent identiques.
+- [x] `NeighbourRow`, `CountryNeighbourRow` et enveloppes `NeighboursResponse` / `CountryNeighboursResponse` sur les deux tables de voisins : le champ `member_asn` n’existe que dans la vue pays, conformément au contrat actuel.
+- [x] `RoaHistoryRow`, `RouteHistoryRow` et enveloppes typées sur les deux historiques de référentiel : `trust_anchor`/`max_length` d’un côté, `source` de l’autre, sans clés parasites.
+- [x] `PeriodRun` (avec `observations`) contre `PeriodPresence` (sans) et `DailyObservation` / `DailyPresence` sur les deux historiques : les clés conditionnelles restent absentes plutôt qu’à `null`.
+- [x] `PrefixFacets` déplacé dans `api/schemas.py` et aligné sur `ApiModel` ; les helpers internes (`_runs`, `_add_statuses`) restent en `dict`, le modèle n’étant appliqué qu’à la frontière HTTP.
+- [x] Vérification : 326 tests réussis (dont les 316 d’équivalence tables journalières) et 4 parcours navigateur OK.
+
 ### Sous-lots restants (non implémentés)
-- [ ] **3.3** tableaux et historiques de `asn_explorer.py` : 8 endpoints, modèles partagés `PrefixRow`, `NeighbourRow`, `HistoryRow`, `PeriodRun`. Pièges : clés conditionnelles (`observations`, `path_ids`), `date` contre `datetime`, égalité JSON stricte entre tables journalières et calcul direct.
 - [ ] **3.4** fiches `asn_detail`, `prefix_detail` et `event_timeline` : datetimes naïfs à convertir en `Z`, `SELECT *`, `EventOut.model_dump()` en mode python.
 - [ ] **3.5** `propagation.py` : trois endpoints avec clés dynamiques (`as{n}`), `paths` nullable, `path_ids` conditionnel et bornes temporelles ; à découper en trois PR.
 
@@ -143,7 +150,7 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 | Suite Python complète | 735 réussis, 8 échecs d’équivalence corrigés en 1.7 ; fichiers API/tableaux rejoués après correction : 316 + 216 réussis |
 | Couverture Python | 81,03 % (seuil CI 80 %) |
 | `npm test` | 11 tests OK |
-| `tests/test_api_contrat_schemas.py` | 6 tests de contrat (OpenAPI, facets, pays, noms AS, incidents UTC, relations) |
+| `tests/test_api_contrat_schemas.py` | 10 tests de contrat (OpenAPI, facets, pays, noms AS, incidents UTC, relations, préfixes, voisins, historiques, périodes) |
 | `npm run test:e2e` | 4 parcours Playwright OK (dont 1 exécution en mode CI) |
 | `npm run typecheck` | OK (src, e2e et configurations) |
 | `npm run build` | OK |
@@ -170,10 +177,11 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 | 2026-11-25 | Smoke test navigateur | `frontend/e2e/smoke.spec.ts`, `playwright.config.ts`, `vitest.config.ts`, `ci.yml` | 4 parcours OK en local et en mode CI ; aucun signalement d’erreur console/HTTP 5xx |
 | 2026-11-25 | Dernière version de recharts | `frontend/package*.json`, `ci.yml`, `docs/deploiement.md` | 3.11.1 installée ; 11 tests, typecheck, build et 4 parcours navigateur OK ; budget 270 000 octets |
 | 2026-11-25 | Lot 3, sous-lots 0 à 2 | `api/schemas.py`, `api/routers/{explore,events,asn_explorer}.py`, `tests/test_api_contrat_schemas.py` | 63 tests ciblés OK, ruff et mypy OK ; 5 endpoints typés, UTC conservé sur les incidents |
+| 2026-11-25 | Lot 3, sous-lot 3.3 | `api/schemas.py`, `api/routers/asn_explorer.py`, `tests/test_api_contrat_schemas.py` | 8 endpoints typés ; 326 tests OK dont 316 d’équivalence, 4 parcours navigateur OK |
 
 ## Bilan
 
 - **Lot 1 :** terminé et vérifié (seule réserve : les réponses `dict` ad hoc conservent des datetimes naïfs, interprétés comme UTC par le frontend).
 - **Lot 2 :** terminé : formatage, couverture, tests frontend (unitaires et navigateur), audits, Dependabot, pre-commit et Dockerfile. L’image est construite et démarrée en CI ; les parcours critiques sont joués dans Chromium.
-- **Lot 3 :** en cours ; sous-lots 0 à 2 terminés (5 endpoints typés), sous-lots 3 à 5 à venir.
+- **Lot 3 :** en cours ; sous-lots 0 à 3 terminés (13 endpoints typés sur 19), sous-lots 3.4 et 3.5 à venir.
 - **Points reportés :** reste de la section 3 et section 4 de `docs/ameliorations-proposees.md`.
