@@ -112,7 +112,7 @@ Ce fichier est le carnet d’exécution des améliorations listées dans `docs/a
 - [x] Installation documentée en tête du fichier (`pipx install pre-commit` puis `pre-commit install`).
 - [x] Aucun téléchargement implicite d’environnement : les hooks réutilisent l’environnement `uv` du projet.
 
-## Lot 3 — Schémas de réponse typés (en cours)
+## Lot 3 — Schémas de réponse typés — **terminé**
 
 Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renvoient encore des `dict` ad hoc et rendre le contrat OpenAPI explicite. Découpage retenu après cartographie des 19 endpoints concernés, du plus sûr au plus risqué ; chaque sous-lot apporte ses tests de contrat avant d’attaquer le suivant.
 
@@ -142,8 +142,12 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 - [x] `identity` reste un schéma explicite aligné sur `REF_ASN_SCHEMA` ; les colonnes inattendues d’un `SELECT *` ne fuient plus dans le contrat.
 - [x] Vérification : 13 tests de contrat, 65 tests ciblés et 4 parcours navigateur OK. **La réserve UTC du lot 1 est ainsi close.**
 
-### Sous-lot restant (non implémenté)
-- [ ] **3.5** `propagation.py` : trois endpoints avec clés dynamiques (`as{n}`), `paths` nullable, `path_ids` conditionnel et bornes temporelles ; à découper en trois PR.
+### 3.5 Propagation — **fait**
+- [x] `PropagationResponse`, `PropagationReplayResponse` et `UpstreamsResponse` sur les trois endpoints de `propagation.py`.
+- [x] Deux variantes de nœuds et d’arêtes : le graphe statique porte `paths`/`hidden_paths`/`observations`, le rejeu uniquement les champs communs — aucune clé parasite dans la réponse.
+- [x] `ReplayFrame` contre `ReplayFrameWithPaths` : `path_ids` est présent quand la liste des chemins est fournie, totalement absent au-delà de la borne (union discriminée par le type réel, pas un `null`).
+- [x] `UpstreamPoint.values` reste un `dict[str, int]` à clés dynamiques `as{n}` ; les `ts` restent des chaînes ISO avec `+00:00` (format attendu par les tests et le frontend).
+- [x] Vérification : 46 tests ciblés (dont les tests de bornes du rejeu), 16 tests de contrat et 4 parcours navigateur OK. **Les 19 endpoints ad hoc sont désormais typés.**
 
 ## Vérification finale du lot 1 + 2
 
@@ -156,7 +160,7 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 | Suite Python complète | 735 réussis, 8 échecs d’équivalence corrigés en 1.7 ; fichiers API/tableaux rejoués après correction : 316 + 216 réussis |
 | Couverture Python | 81,03 % (seuil CI 80 %) |
 | `npm test` | 11 tests OK |
-| `tests/test_api_contrat_schemas.py` | 13 tests de contrat (OpenAPI, facets, pays, noms AS, incidents UTC, relations, préfixes, voisins, historiques, périodes, fiches AS/préfixe/timeline) |
+| `tests/test_api_contrat_schemas.py` | 16 tests de contrat (OpenAPI, facets, pays, noms AS, incidents UTC, relations, préfixes, voisins, historiques, périodes, fiches AS/préfixe/timeline, propagation et amonts) |
 | `npm run test:e2e` | 4 parcours Playwright OK (dont 1 exécution en mode CI) |
 | `npm run typecheck` | OK (src, e2e et configurations) |
 | `npm run build` | OK |
@@ -185,10 +189,11 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 | 2026-11-25 | Lot 3, sous-lots 0 à 2 | `api/schemas.py`, `api/routers/{explore,events,asn_explorer}.py`, `tests/test_api_contrat_schemas.py` | 63 tests ciblés OK, ruff et mypy OK ; 5 endpoints typés, UTC conservé sur les incidents |
 | 2026-11-25 | Lot 3, sous-lot 3.3 | `api/schemas.py`, `api/routers/asn_explorer.py`, `tests/test_api_contrat_schemas.py` | 8 endpoints typés ; 326 tests OK dont 316 d’équivalence, 4 parcours navigateur OK |
 | 2026-11-25 | Lot 3, sous-lot 3.4 | `api/schemas.py`, `api/routers/{explore,events}.py`, `tests/test_api_contrat_schemas.py` | 3 fiches typées ; datetimes en `Z` ; 13 tests de contrat et 4 parcours navigateur OK |
+| 2026-11-25 | Lot 3, sous-lot 3.5 | `api/schemas.py`, `api/routers/propagation.py`, `tests/test_api_contrat_schemas.py` | 3 endpoints typés ; `path_ids` conditionnel préservé ; 46 tests ciblés et 4 parcours navigateur OK |
 
 ## Bilan
 
 - **Lot 1 :** terminé et vérifié ; sa réserve sur les datetimes naïfs des réponses `dict` ad hoc est close par le lot 3.4.
 - **Lot 2 :** terminé : formatage, couverture, tests frontend (unitaires et navigateur), audits, Dependabot, pre-commit et Dockerfile. L’image est construite et démarrée en CI ; les parcours critiques sont joués dans Chromium.
-- **Lot 3 :** en cours ; sous-lots 0 à 4 terminés (16 endpoints typés sur 19), sous-lot 3.5 (propagation) à venir.
-- **Points reportés :** reste de la section 3 et section 4 de `docs/ameliorations-proposees.md`.
+- **Lot 3 :** terminé : 19 endpoints ad hoc typés, contrat OpenAPI explicite et datetimes sérialisés en UTC sur toutes les réponses concernées.
+- **Points reportés :** section 4 de `docs/ameliorations-proposees.md` (performance, exploitation, sécurité) et autres pistes produit de la section 3.

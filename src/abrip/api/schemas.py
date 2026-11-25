@@ -445,3 +445,94 @@ class EventTimeline(ApiModel):
     related_events: list[EventOut] = Field(default_factory=list)
     churn: list[ChurnPoint] = Field(default_factory=list)
     visibility: list[VisibilityPoint] = Field(default_factory=list)
+
+
+class GraphNode(ApiModel):
+    asn: int
+    as_name: str | None = None
+    org_name: str | None = None
+    country_iso2: str | None = None
+    rpki: str | None = None
+
+
+class PropagationNode(GraphNode):
+    paths: list[list[int]]
+    hidden_paths: int
+    observations: int
+
+
+class GraphEdge(ApiModel):
+    source: int
+    target: int
+    relation: str
+    violation_observations: int
+
+
+class PropagationEdge(GraphEdge):
+    observations: int
+
+
+class PathRecord(ApiModel):
+    path: list[int]
+    observations: int
+    valley_violation: bool
+
+
+class PropagationResponse(ApiModel):
+    prefix: str
+    asn: int | None = None
+    start: str | None = None
+    end: str | None = None
+    nodes: list[PropagationNode]
+    edges: list[PropagationEdge]
+    paths: list[PathRecord]
+    paths_total: int
+    paths_hidden: int
+    max_observations: int
+    moas: bool
+
+
+class ReplayFrame(ApiModel):
+    ts: str
+    announcements: int
+    withdrawals: int
+    path_count: int
+    nodes: list[int]
+    edges: list[int]
+
+
+class ReplayFrameWithPaths(ReplayFrame):
+    path_ids: list[int]
+
+
+class PropagationReplayResponse(ApiModel):
+    prefix: str
+    asn: int | None = None
+    start: str | None = None
+    end: str | None = None
+    step_minutes: int
+    warmup_hours: int
+    clamped: bool
+    nodes: list[GraphNode]
+    edges: list[GraphEdge]
+    paths: list[list[int]] | None = None
+    frames: list[ReplayFrame | ReplayFrameWithPaths]
+
+
+class Upstream(ApiModel):
+    asn: int
+    as_name: str | None = None
+    peak_peers: int
+
+
+class UpstreamPoint(ApiModel):
+    ts: str
+    values: dict[str, int]
+
+
+class UpstreamsResponse(ApiModel):
+    prefix: str
+    asn: int | None = None
+    bucket_hours: int
+    upstreams: list[Upstream]
+    points: list[UpstreamPoint]

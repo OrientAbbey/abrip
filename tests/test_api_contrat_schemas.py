@@ -28,6 +28,7 @@ def test_schemas_exposes_dans_openapi(client):
     assert "AsnNames" in schemas
     assert {"PrefixRow", "NeighboursResponse", "RoaHistoryResponse", "PeriodRun"} <= set(schemas)
     assert {"AsnDetail", "PrefixDetail", "EventTimeline"} <= set(schemas)
+    assert {"PropagationResponse", "PropagationReplayResponse", "UpstreamsResponse"} <= set(schemas)
     assert set(schemas["EventFacets"]["properties"]) == {
         "detector",
         "severity",
@@ -196,3 +197,68 @@ class TestContratAvecDonnees:
             assert point["ts"].endswith("Z")
         for point in body["visibility"]:
             assert point["ts"].endswith("Z")
+
+    def test_graphe_de_propagation_est_typé(self, client):
+        body = client.get("/api/prefixes/102.22.8.0%2F22/propagation").json()
+        assert set(body) == {
+            "prefix",
+            "asn",
+            "start",
+            "end",
+            "nodes",
+            "edges",
+            "paths",
+            "paths_total",
+            "paths_hidden",
+            "max_observations",
+            "moas",
+        }
+        if body["nodes"]:
+            assert {
+                "asn",
+                "as_name",
+                "org_name",
+                "country_iso2",
+                "rpki",
+                "paths",
+                "hidden_paths",
+                "observations",
+            } <= set(body["nodes"][0])
+        if body["edges"]:
+            assert {
+                "source",
+                "target",
+                "relation",
+                "observations",
+                "violation_observations",
+            } <= set(body["edges"][0])
+
+    def test_rejeu_garde_path_ids_conditionnel(self, client):
+        body = client.get("/api/prefixes/102.22.8.0%2F22/propagation/replay").json()
+        assert set(body) == {
+            "prefix",
+            "asn",
+            "start",
+            "end",
+            "step_minutes",
+            "warmup_hours",
+            "clamped",
+            "nodes",
+            "edges",
+            "paths",
+            "frames",
+        }
+        assert body["frames"]
+        if body["paths"] is None:
+            assert all("path_ids" not in frame for frame in body["frames"])
+        else:
+            assert all("path_ids" in frame for frame in body["frames"])
+        for edge in body["edges"]:
+            assert "observations" not in edge
+
+    def test_fournisseurs_amont_gardent_les_cles_dynamiques(self, client):
+        body = client.get("/api/prefixes/102.22.8.0%2F22/upstreams").json()
+        assert set(body) == {"prefix", "asn", "bucket_hours", "upstreams", "points"}
+        for point in body["points"]:
+            assert set(point) == {"ts", "values"}
+            assert all(key.startswith("as") and key[2:].isdigit() for key in point["values"])
