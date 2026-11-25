@@ -112,6 +112,26 @@ Ce fichier est le carnet d’exécution des améliorations listées dans `docs/a
 - [x] Installation documentée en tête du fichier (`pipx install pre-commit` puis `pre-commit install`).
 - [x] Aucun téléchargement implicite d’environnement : les hooks réutilisent l’environnement `uv` du projet.
 
+## Lot 3 — Schémas de réponse typés (en cours)
+
+Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renvoient encore des `dict` ad hoc et rendre le contrat OpenAPI explicite. Découpage retenu après cartographie des 19 endpoints concernés, du plus sûr au plus risqué ; chaque sous-lot apporte ses tests de contrat avant d’attaquer le suivant.
+
+### 3.0 et 3.1 — Facets, pays et table des noms — **fait**
+- [x] `EventFacets` (4 cardinalités `dict[str, int]`) et `response_model` sur `/events/facets`.
+- [x] `CountryIndicator` (9 champs, dont `rpki_coverage_ratio` nullable) et `response_model=list[CountryIndicator]` sur `/countries`.
+- [x] `AsnNames` (`RootModel[dict[str, str]]`) sur `/asns/names` : les clés dynamiques (ASN → nom) sont préservées.
+- [x] Vérification : `test_api_contrat_schemas.py` contrôle les clés, les types et les schémas présents dans `/api/openapi.json`.
+
+### 3.2 — Incidents et relations d’un pays — **fait**
+- [x] `IncidentOut` (base `ApiModel`) sur `/incidents` : contrairement aux `dict` bruts, les datetimes imbriqués passent par le sérialiseur UTC (`Z`).
+- [x] `CountryRelation` et `CountryRelationships` sur `/countries/{iso2}/relationships`, avec listes ordonnées inchangées.
+- [x] Vérification : `test_api_contrat_schemas.py` exige le suffixe `Z` sur `first_seen`/`last_seen` des incidents ; les tests existants de relations passent sans changement.
+
+### Sous-lots restants (non implémentés)
+- [ ] **3.3** tableaux et historiques de `asn_explorer.py` : 8 endpoints, modèles partagés `PrefixRow`, `NeighbourRow`, `HistoryRow`, `PeriodRun`. Pièges : clés conditionnelles (`observations`, `path_ids`), `date` contre `datetime`, égalité JSON stricte entre tables journalières et calcul direct.
+- [ ] **3.4** fiches `asn_detail`, `prefix_detail` et `event_timeline` : datetimes naïfs à convertir en `Z`, `SELECT *`, `EventOut.model_dump()` en mode python.
+- [ ] **3.5** `propagation.py` : trois endpoints avec clés dynamiques (`as{n}`), `paths` nullable, `path_ids` conditionnel et bornes temporelles ; à découper en trois PR.
+
 ## Vérification finale du lot 1 + 2
 
 | Vérification | Résultat |
@@ -123,6 +143,7 @@ Ce fichier est le carnet d’exécution des améliorations listées dans `docs/a
 | Suite Python complète | 735 réussis, 8 échecs d’équivalence corrigés en 1.7 ; fichiers API/tableaux rejoués après correction : 316 + 216 réussis |
 | Couverture Python | 81,03 % (seuil CI 80 %) |
 | `npm test` | 11 tests OK |
+| `tests/test_api_contrat_schemas.py` | 6 tests de contrat (OpenAPI, facets, pays, noms AS, incidents UTC, relations) |
 | `npm run test:e2e` | 4 parcours Playwright OK (dont 1 exécution en mode CI) |
 | `npm run typecheck` | OK (src, e2e et configurations) |
 | `npm run build` | OK |
@@ -148,9 +169,11 @@ Ce fichier est le carnet d’exécution des améliorations listées dans `docs/a
 | 2026-11-25 | Dependabot : premier passage | `pyproject.toml`, `uv.lock`, `ci.yml`, `frontend/package*.json`, `docs/deploiement.md` | Groupe Python et actions v7 fusionnés (CI verte) ; `react-router-dom 7.18.6` seul ; recharts 3.11.0 et node 25-slim écartés (budget gzip, non LTS) |
 | 2026-11-25 | Smoke test navigateur | `frontend/e2e/smoke.spec.ts`, `playwright.config.ts`, `vitest.config.ts`, `ci.yml` | 4 parcours OK en local et en mode CI ; aucun signalement d’erreur console/HTTP 5xx |
 | 2026-11-25 | Dernière version de recharts | `frontend/package*.json`, `ci.yml`, `docs/deploiement.md` | 3.11.1 installée ; 11 tests, typecheck, build et 4 parcours navigateur OK ; budget 270 000 octets |
+| 2026-11-25 | Lot 3, sous-lots 0 à 2 | `api/schemas.py`, `api/routers/{explore,events,asn_explorer}.py`, `tests/test_api_contrat_schemas.py` | 63 tests ciblés OK, ruff et mypy OK ; 5 endpoints typés, UTC conservé sur les incidents |
 
 ## Bilan
 
 - **Lot 1 :** terminé et vérifié (seule réserve : les réponses `dict` ad hoc conservent des datetimes naïfs, interprétés comme UTC par le frontend).
 - **Lot 2 :** terminé : formatage, couverture, tests frontend (unitaires et navigateur), audits, Dependabot, pre-commit et Dockerfile. L’image est construite et démarrée en CI ; les parcours critiques sont joués dans Chromium.
-- **Points reportés :** sections 3 et 4 de `docs/ameliorations-proposees.md`.
+- **Lot 3 :** en cours ; sous-lots 0 à 2 terminés (5 endpoints typés), sous-lots 3 à 5 à venir.
+- **Points reportés :** reste de la section 3 et section 4 de `docs/ameliorations-proposees.md`.

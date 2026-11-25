@@ -8,13 +8,24 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from abrip.analytics.daily import PREFIX_ORIGIN, summary_is_current
 from abrip.api.deps import DataAccess, clamp_limit, get_data_access
-from abrip.api.schemas import AsnSummary, Page, PrefixSummary, SearchHit
+from abrip.api.schemas import (
+    AsnNames,
+    AsnSummary,
+    CountryIndicator,
+    Page,
+    PrefixSummary,
+    SearchHit,
+)
 
 router = APIRouter(tags=["exploration"])
 
 
-@router.get("/asns/names", summary="Table de correspondance ASN → nom, pour l'affichage")
-def asn_names(data: DataAccess = Depends(get_data_access)) -> dict[str, str]:
+@router.get(
+    "/asns/names",
+    response_model=AsnNames,
+    summary="Table de correspondance ASN → nom, pour l'affichage",
+)
+def asn_names(data: DataAccess = Depends(get_data_access)) -> AsnNames:
     """Nom court (AS2Org ``aut_name``) ou, à défaut, nom d'organisation, par ASN.
 
     Une seule table, chargée une fois côté client (voir ``useAsnNames`` côté
@@ -22,13 +33,13 @@ def asn_names(data: DataAccess = Depends(get_data_access)) -> dict[str, str]:
     plus), un aller-retour suffit plutôt qu'une jointure par composant.
     """
     if not data.exists("ref_as_org"):
-        return {}
+        return AsnNames(root={})
     rows = data.query(
         f"""SELECT asn, coalesce(asn_name, org_name) AS name
             FROM {data.table("ref_as_org")}
             WHERE coalesce(asn_name, org_name) IS NOT NULL"""
     )
-    return {str(row["asn"]): row["name"] for row in rows}
+    return AsnNames(root={str(row["asn"]): row["name"] for row in rows})
 
 
 @router.get("/asns", response_model=Page[AsnSummary], summary="Systèmes autonomes suivis")
@@ -322,8 +333,10 @@ def prefix_detail(prefix: str, data: DataAccess = Depends(get_data_access)) -> d
     }
 
 
-@router.get("/countries", summary="Indicateurs agrégés par pays")
-def countries(data: DataAccess = Depends(get_data_access)) -> list[dict]:
+@router.get(
+    "/countries", response_model=list[CountryIndicator], summary="Indicateurs agrégés par pays"
+)
+def countries(data: DataAccess = Depends(get_data_access)) -> list[CountryIndicator]:
     if not data.exists("metric_country"):
         return []
     rpki_join = ""
@@ -333,7 +346,7 @@ def countries(data: DataAccess = Depends(get_data_access)) -> list[dict]:
         rpki_join = (
             f"LEFT JOIN {data.table('metric_rpki_coverage')} r ON r.country_iso2 = c.country_iso2"
         )
-    return data.query(
+    rows = data.query(
         f"""SELECT c.country_iso2 AS country_iso2,
                    round(avg(c.transit_dependency_ratio), 6) AS transit_dependency_ratio,
                    round(avg(c.avg_hhi_transit), 6) AS hhi_transit,
@@ -348,6 +361,7 @@ def countries(data: DataAccess = Depends(get_data_access)) -> list[dict]:
             GROUP BY 1
             ORDER BY transit_dependency_ratio DESC"""
     )
+    return [CountryIndicator(**row) for row in rows]
 
 
 @router.get("/search", response_model=list[SearchHit], summary="Recherche unifiée")

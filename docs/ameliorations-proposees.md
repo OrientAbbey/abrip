@@ -1,6 +1,6 @@
 # Améliorations proposées pour ABRIP
 
-Ce document conserve l’ensemble des pistes d’amélioration identifiées dans la revue du projet. Les points 1 et 2 sont le périmètre du lot en cours ; les points 3 et 4 sont consignés pour les lots ultérieurs, sans engagement d’implémentation immédiate.
+Ce document conserve l’ensemble des pistes d’amélioration identifiées dans la revue du projet. Les points 1 et 2 sont terminés et consignés dans `docs/suivi-modifications.md` ; le lot 3 a commencé par le chantier des schémas de réponse typés ; le reste des points 3 et 4 est à planifier.
 
 ## 1. Correctifs fonctionnels et de fiabilité — lot en cours
 
@@ -23,7 +23,7 @@ Ce document conserve l’ensemble des pistes d’amélioration identifiées dans
 ## 3. Améliorations produit — à planifier
 
 - **Boucle de qualification humaine L5** (`docs/limites-et-remediations.md`, CLI et interface) : enregistrer les retours sur les événements, fournir `abrip detect label` et `abrip detect precision`, versionner une allowlist et afficher la précision par détecteur. Le rappel mesuré sur les anomalies de démonstration ne suffit pas à mesurer les faux positifs réels.
-- **Schémas de réponse typés partout** : plusieurs endpoints renvoient encore des `dict` ad hoc (statistiques de préfixe, séries DuckDB) ; les convertir en modèles Pydantic unifierait la sérialisation UTC et le contrat public, aujourd’hui partiellement couvert par `ApiModel`.
+- **Schémas de réponse typés partout — lot 3 en cours** : plusieurs endpoints renvoient encore des `dict` ad hoc (statistiques de préfixe, séries DuckDB) ; les convertir en modèles Pydantic unifierait la sérialisation UTC et le contrat public, aujourd’hui partiellement couvert par `ApiModel`. Premiers sous-lots faits : facets, indicateurs pays, table des noms AS, incidents et relations d’un pays. Restent les tableaux/historiques, les fiches AS/préfixe/timeline et les trois endpoints de propagation (détail et ordre dans `docs/suivi-modifications.md`).
 - **Détection sub-horaire** : compléter les détecteurs raisonnant actuellement par jour avec des fenêtres glissantes et des signatures adaptées aux incidents courts.
 - **Alerting opérationnel** (`src/abrip/cli.py`) : envoyer une notification (webhook, Slack ou e-mail) pour les incidents critiques, avec déduplication par `incident_id`.
 - **Tableau de qualité des données** : exposer la fraîcheur par source, la couverture par pays, le statut ROA et les collecteurs silencieux à partir des métriques et métadonnées existantes.
