@@ -92,6 +92,7 @@ Ce fichier est le carnet d’exécution des améliorations listées dans `docs/a
 - [x] `pip-audit==2.10.1` ajouté au groupe dev et exécuté en CI ; localement : « No known vulnerabilities found ».
 - [x] `npm audit --audit-level=high` ajouté à la CI ; localement, `npm install` rapporte 0 vulnérabilité.
 - [x] Aucun faux positif constaté ; le paquet local `abrip` est simplement ignoré par `pip-audit` (absent de PyPI).
+- [x] Premier passage de Dependabot traité : groupe Python fusionné (CI verte), actions GitHub montées en v7 (checkout, setup-node, setup-python, setup-uv, upload-artifact — l’avertissement Node 20 disparaît). `react-router-dom 7.18.6` appliqué seul ; `recharts 3.11.0` écarté car il pousse le bundle gzip à 259 072 octets (plafond 256 000). `node:25-slim` écarté (version non LTS) ; on reste sur `node:22-slim` jusqu’à la prochaine LTS.
 
 ### 2.5 Installation Docker reproductible — **modifié, non construit localement**
 - [x] `Dockerfile` : `uv==0.13.1` installé puis `uv sync --locked --no-dev`, sans cache conservé, `PATH` pointant sur `/app/.venv/bin`.
@@ -118,7 +119,7 @@ Ce fichier est le carnet d’exécution des améliorations listées dans `docs/a
 | `npm test` | 11 tests OK |
 | `npm run typecheck` | OK |
 | `npm run build` | OK |
-| Budget gzip mesuré | 245 163 octets (plafond 256 000) |
+| Budget gzip mesuré | 245 262 octets (plafond 256 000) |
 | `abrip demo verify` | rappel 1.0, 5/5 |
 | Construction Docker | validée en CI (build + service interrogé, 1 min 16 s) |
 
@@ -137,6 +138,7 @@ Ce fichier est le carnet d’exécution des améliorations listées dans `docs/a
 | 2026-11-25 | Couverture mesurée | `pyproject.toml`, `ci.yml`, `.gitignore` | 81,03 % ; seuil 80 % ; `coverage report` sort en succès |
 | 2026-11-25 | Stabilité des agrégats | `api/routers/explore.py`, `api/routers/metrics.py` | 316 tests d’équivalence OK, trois exécutions stables |
 | 2026-11-25 | Fusion PR #4 | `main` (commit `ce0d650`) | CI verte sur `main` : Python 2 min 7 s, frontend 11 s, image 1 min 16 s |
+| 2026-11-25 | Dependabot : premier passage | `pyproject.toml`, `uv.lock`, `ci.yml`, `frontend/package*.json`, `docs/deploiement.md` | Groupe Python et actions v7 fusionnés (CI verte) ; `react-router-dom 7.18.6` seul ; recharts 3.11.0 et node 25-slim écartés (budget gzip, non LTS) |
 
 ## Bilan
 
