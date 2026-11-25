@@ -98,10 +98,63 @@ jobs:
             exit 1
           fi
 
+  e2e:
+    name: Parcours navigateur
+    runs-on: ubuntu-latest
+    needs: [python, frontend]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Installer le projet depuis le verrou
+        run: uv sync --locked --all-extras
+
+      - name: Installer les dépendances frontend
+        run: npm ci
+        working-directory: frontend
+
+      - name: Compiler le frontend
+        run: npm run build
+        working-directory: frontend
+
+      # Le service sert `frontend/dist` sur la même origine que l'API ; le jeu
+      # de démonstration fournit des données déterministes aux parcours.
+      - name: Générer le jeu de démonstration
+        run: uv run --locked abrip demo bootstrap
+
+      - name: Installer Chromium
+        run: npx playwright install --with-deps chromium
+        working-directory: frontend
+
+      - name: Parcours critiques
+        run: npm run test:e2e
+        working-directory: frontend
+
+      - name: Conserver les traces en cas d'échec
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-traces
+          path: frontend/test-results/
+          if-no-files-found: ignore
+
   image:
     name: Construction de l'image
     runs-on: ubuntu-latest
-    needs: [python, frontend]
+    needs: [python, frontend, e2e]
     steps:
       - uses: actions/checkout@v7
 

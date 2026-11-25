@@ -78,14 +78,19 @@ Ce fichier est le carnet d’exécution des améliorations listées dans `docs/a
 - [x] Vérification locale : `coverage report` applique le seuil et sort en succès à 81,03 %.
 - [x] Note : la mesure complète prend ~26 min sur ce poste (tests de démonstration compris) ; la CI la parallélise mieux mais reste le poste le plus long.
 
-### 2.3 Tests frontend — **fait, sauf smoke test navigateur**
+### 2.3 Tests frontend — **fait**
 - [x] Configuration vérifiée : Vite 8, TypeScript 7, npm, aucun test existant.
 - [x] Vitest 5.1.2 ajouté en dépendance exacte et script `npm test`.
 - [x] Tests des fonctions pures : `format.test.ts` (UTC) et `searchParams.test.ts` (pagination).
 - [x] Régression de pagination couverte par `searchParams.test.ts`, y compris le cas « changer d’offset ».
 - [x] Tests intégrés à la CI (`npm test` avant le typecheck et le build).
 - [x] `npm test` (11 tests), `npm run typecheck`, `npm run build` passent.
-- [ ] Smoke test Playwright : **reporté**. Il demande un navigateur et un serveur de démonstration dans la CI ; le coût (installation Chromium, démarrage de l’API, données) dépasse ce lot. Les parcours critiques restent couverts par les tests API et le build. À planifier avec les tests d’accessibilité (section 4).
+- [x] Smoke test Playwright : `@playwright/test` 1.65.1 (dépendance exacte) et script `npm run test:e2e`.
+- [x] `playwright.config.ts` démarre `abrip api serve` sur le port 8010 et attend `/api/health` ; le service sert `frontend/dist` et les données de démonstration sur la même origine.
+- [x] `frontend/e2e/smoke.spec.ts` couvre quatre parcours : vue d’ensemble, liste des AS → fiche AS, liste des préfixes → fiche préfixe, liste des événements → détail. Chaque parcours vérifie aussi l’absence d’erreur console, d’exception JS et de réponse HTTP 5xx.
+- [x] Vitest est limité à `src/**/*.test.ts` (`vitest.config.ts`) pour ne pas tenter d’exécuter les specs Playwright avec son runner ; la configuration Playwright est incluse au typecheck (`@types/node` ajouté).
+- [x] CI : job `e2e` dédié (Python + uv + Node, `demo bootstrap`, build, `npx playwright install --with-deps chromium`, parcours, traces uploadées en cas d’échec). Le job `image` attend désormais ce job.
+- [x] Vérification locale : 4 parcours réussis, y compris en mode CI (serveur démarré par Playwright, deux workers). Le jeu de démonstration ne contient que 10 AS (page de 25) : la pagination « Suivant » reste couverte par les tests Vitest de `searchParams.ts`, pas par le navigateur.
 
 ### 2.4 Audit et veille des dépendances — **fait**
 - [x] Dependabot configuré (`.github/dependabot.yml`) pour `uv`, `npm`, GitHub Actions et Docker, mises à jour hebdomadaires groupées (mensuelles pour les Actions et l’image).
@@ -117,7 +122,8 @@ Ce fichier est le carnet d’exécution des améliorations listées dans `docs/a
 | Suite Python complète | 735 réussis, 8 échecs d’équivalence corrigés en 1.7 ; fichiers API/tableaux rejoués après correction : 316 + 216 réussis |
 | Couverture Python | 81,03 % (seuil CI 80 %) |
 | `npm test` | 11 tests OK |
-| `npm run typecheck` | OK |
+| `npm run test:e2e` | 4 parcours Playwright OK (dont 1 exécution en mode CI) |
+| `npm run typecheck` | OK (src, e2e et configurations) |
 | `npm run build` | OK |
 | Budget gzip mesuré | 245 262 octets (plafond 256 000) |
 | `abrip demo verify` | rappel 1.0, 5/5 |
@@ -139,9 +145,10 @@ Ce fichier est le carnet d’exécution des améliorations listées dans `docs/a
 | 2026-11-25 | Stabilité des agrégats | `api/routers/explore.py`, `api/routers/metrics.py` | 316 tests d’équivalence OK, trois exécutions stables |
 | 2026-11-25 | Fusion PR #4 | `main` (commit `ce0d650`) | CI verte sur `main` : Python 2 min 7 s, frontend 11 s, image 1 min 16 s |
 | 2026-11-25 | Dependabot : premier passage | `pyproject.toml`, `uv.lock`, `ci.yml`, `frontend/package*.json`, `docs/deploiement.md` | Groupe Python et actions v7 fusionnés (CI verte) ; `react-router-dom 7.18.6` seul ; recharts 3.11.0 et node 25-slim écartés (budget gzip, non LTS) |
+| 2026-11-25 | Smoke test navigateur | `frontend/e2e/smoke.spec.ts`, `playwright.config.ts`, `vitest.config.ts`, `ci.yml` | 4 parcours OK en local et en mode CI ; aucun signalement d’erreur console/HTTP 5xx |
 
 ## Bilan
 
 - **Lot 1 :** terminé et vérifié (seule réserve : les réponses `dict` ad hoc conservent des datetimes naïfs, interprétés comme UTC par le frontend).
-- **Lot 2 :** formatage, couverture, tests frontend, audits, Dependabot, pre-commit et Dockerfile faits. L’image est construite et démarrée en CI. Reste une vérification d’environnement : smoke test navigateur Playwright (reporté, documenté).
+- **Lot 2 :** terminé : formatage, couverture, tests frontend (unitaires et navigateur), audits, Dependabot, pre-commit et Dockerfile. L’image est construite et démarrée en CI ; les parcours critiques sont joués dans Chromium.
 - **Points reportés :** sections 3 et 4 de `docs/ameliorations-proposees.md`.
