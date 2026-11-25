@@ -11,8 +11,10 @@ export default defineConfig({
   // Un seul navigateur en local : le premier lancement peut être lent sur
   // Windows, et deux instances concurrentes dépassent le délai de démarrage.
   workers: process.env.CI ? 2 : 1,
-  timeout: 60_000,
-  expect: { timeout: 10_000 },
+  // Certaines fiches reconstruisent des index RPKI/IRR côté API : laisser
+  // assez de temps aux assertions quand plusieurs parcours sont parallèles.
+  timeout: 90_000,
+  expect: { timeout: 20_000 },
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [["github"], ["list"]] : [["list"]],

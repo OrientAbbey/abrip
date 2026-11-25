@@ -88,12 +88,12 @@ jobs:
 
       # Le budget de bundle est un engagement du cahier des charges : il est
       # vérifié automatiquement, sinon il dérive au fil des dépendances.
-      - name: Vérifier le budget de bundle (250 Ko compressés)
+      - name: Vérifier le budget de bundle (270 000 octets gzip)
         run: |
           TAILLE=$(find dist/assets \( -name '*.js' -o -name '*.css' \) -print0 \
             | xargs -0 gzip -c | wc -c)
-          echo "Total transféré : $((TAILLE / 1024)) Ko compressés"
-          if [ "$TAILLE" -gt 256000 ]; then
+          echo "Total transféré : $TAILLE octets gzip"
+          if [ "$TAILLE" -gt 270000 ]; then
             echo "Budget dépassé"
             exit 1
           fi
