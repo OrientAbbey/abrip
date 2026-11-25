@@ -42,6 +42,7 @@ dev = [
   # réinstallerait systématiquement la dernière version).
   "ruff==0.17.5",
   "mypy==2.4.1",
+  "pip-audit==2.10.1",
 ]
 
 [project.scripts]
@@ -84,3 +85,14 @@ asyncio_default_fixture_loop_scope = "function"
 filterwarnings = [
   "ignore:Using .*httpx.*with .*starlette.testclient.* is deprecated:DeprecationWarning",
 ]
+
+# La couverture est mesurée en CI. Le seuil est fixé juste sous la valeur
+# observée sur la suite complète (81 %) pour interdire les régressions sans
+# bloquer sur du bruit de plateforme.
+[tool.coverage.run]
+source = ["abrip"]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+skip_covered = true

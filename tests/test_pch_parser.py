@@ -90,6 +90,29 @@ class TestPchTextDumpParser:
             handle.write("contenu inattendu, pas de table BGP\n")
         assert list(PchTextDumpParser().parse(path, "c")) == []
 
+    def test_grand_releve_est_parcouru_en_flux(self, tmp_path):
+        """Un relevé national ne doit pas être chargé en entier : on consomme
+        le générateur ligne à ligne, sans matérialiser la liste des routes."""
+        rows = [
+            _fixed_width_row(
+                "*>", f"196.60.{i % 256}.0/24", "196.60.1.1", "0", "", "0", "3320 37400 i"
+            )
+            for i in range(5_000)
+        ]
+        path = tmp_path / "gros-releve.gz"
+        with gzip.open(path, "wt", encoding="utf-8") as handle:
+            handle.write("".join(["BGP table version is 0\n", _header(), *rows]))
+
+        records = PchTextDumpParser().parse(path, "c")
+        assert not isinstance(records, list)  # générateur, pas une liste complète
+        assert next(records)["prefix"] == "196.60.0.0/24"
+        assert sum(1 for _ in records) == 4_999
+
+    def test_les_lignes_du_preambule_ne_sont_pas_des_routes(self, sample_file):
+        records = list(PchTextDumpParser().parse(sample_file, "c"))
+        assert all(r["prefix"].count("/") == 1 for r in records)
+        assert all(r["origin_asn"] for r in records)
+
     def test_next_hop_correctement_isole(self, sample_file):
         records = {
             r["prefix"]: r

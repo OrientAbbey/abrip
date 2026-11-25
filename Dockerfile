@@ -23,9 +23,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-COPY pyproject.toml README.md ./
+COPY pyproject.toml uv.lock README.md ./
 COPY src/ ./src/
-RUN pip install --no-cache-dir .
+# Les dépendances sont installées depuis le verrou : l'image contient
+# exactement les versions testées par la CI, pas une résolution fraîche.
+RUN pip install --no-cache-dir uv==0.13.1 \
+    && uv sync --locked --no-dev \
+    && rm -rf /root/.cache/uv
+ENV PATH="/app/.venv/bin:$PATH"
 
 COPY configs/ ./configs/
 COPY --from=frontend /build/dist ./frontend/dist

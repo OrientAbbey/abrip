@@ -418,17 +418,13 @@ def compute_rpki_coverage(
 
     validator = RpkiValidator.from_frame(ref_roa) if not ref_roa.is_empty() else None
     if validator is None:
-        statuses = ["not-found"] * announced.height
+        validated = announced.with_columns(pl.lit("not-found").alias("rpki_status"))
     else:
-        statuses = [
-            validator.validate(row["prefix"], int(row["asn"])).value
-            for row in announced.iter_rows(named=True)
-        ]
+        validated = validator.validate_frame(announced, asn_col="asn")
 
     window_start = datetime.combine(start, datetime.min.time())
     return (
-        announced.with_columns(pl.Series("rpki_status", statuses))
-        .group_by("country_iso2")
+        validated.group_by("country_iso2")
         .agg(
             prefixes_announced=pl.col("prefix").n_unique(),
             prefixes_valid=pl.col("prefix").filter(pl.col("rpki_status") == "valid").n_unique(),
@@ -512,18 +508,56 @@ def compute_all(
 def _persist(
     settings: Settings, catalog: Catalog, name: str, frame: pl.DataFrame, run_id: str
 ) -> int:
+    """Écrit les métriques en partitions journalières, sans effacer l'historique."""
     if frame is None or frame.is_empty():
         return 0
+
     target = settings.analytics_dir / name
-    write_frame(frame, target)
-    catalog.register_partition(
-        name,
-        str(target),
-        frame.height,
-        sum(f.stat().st_size for f in target.glob("*.parquet")),
-        run_id,
+    if "window_start" in frame.columns:
+        timestamp = "window_start"
+    elif "snapshot_ts" in frame.columns:
+        timestamp = "snapshot_ts"
+    else:
+        raise ValueError(f"Métrique {name} sans colonne temporelle : partitionnement impossible.")
+
+    # Migration transparente des anciennes tables plates. On écrit d'abord les
+    # partitions, puis supprime les fichiers historiques seulement si tout a réussi.
+    legacy_files = sorted(target.glob("*.parquet")) if target.exists() else []
+    if legacy_files:
+        legacy = pl.read_parquet(legacy_files)
+        for day, partition in _by_day(legacy, timestamp):
+            _write_metric_partition(target, name, day, partition, catalog, run_id)
+        for path in legacy_files:
+            path.unlink()
+
+    rows_written = 0
+    for day, partition in _by_day(frame, timestamp):
+        _write_metric_partition(target, name, day, partition, catalog, run_id)
+        rows_written += partition.height
+    return rows_written
+
+
+def _by_day(frame: pl.DataFrame, timestamp: str) -> list[tuple[str, pl.DataFrame]]:
+    """Regroupe une métrique temporelle par date UTC, sans garder la colonne auxiliaire."""
+    if frame.is_empty():
+        return []
+    grouped = frame.filter(pl.col(timestamp).is_not_null()).with_columns(
+        pl.col(timestamp).dt.date().cast(pl.String).alias("_day")
     )
-    return frame.height
+    partitions = []
+    for group in grouped.partition_by("_day", maintain_order=True):
+        day = str(group.get_column("_day")[0])
+        partitions.append((day, group.drop("_day")))
+    return partitions
+
+
+def _write_metric_partition(
+    root: Path, name: str, day: str, frame: pl.DataFrame, catalog: Catalog, run_id: str
+) -> None:
+    target = root / f"date={day}"
+    write_frame(frame, target)
+    size = sum(path.stat().st_size for path in target.glob("*.parquet"))
+    catalog.register_partition(name, str(target), frame.height, size, run_id)
 
 
 def _load_reference(settings: Settings, name: str) -> pl.DataFrame:

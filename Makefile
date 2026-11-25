@@ -1,4 +1,4 @@
-.PHONY: install dev lint typecheck test demo api front build clean
+.PHONY: install dev lint typecheck test test-front demo api front build clean
 
 install:
 	pip install -e ".[dev,mrt,live]"
@@ -7,10 +7,13 @@ lint:
 	ruff check src tests && ruff format --check src tests
 
 typecheck:
-	mypy src/abrip/models.py src/abrip/api
+	mypy src
 
 test:
 	pytest -q --cov=abrip --cov-report=term-missing
+
+test-front:
+	cd frontend && npm test
 
 demo:
 	abrip demo bootstrap

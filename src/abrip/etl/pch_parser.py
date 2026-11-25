@@ -41,6 +41,7 @@ import gzip
 import re
 from collections.abc import Iterator
 from datetime import UTC, datetime
+from itertools import chain
 from pathlib import Path
 from typing import Any
 
@@ -137,61 +138,71 @@ class PchTextDumpParser(MRTParser):
         snapshot_ts = _snapshot_from_filename(path.name)
 
         with _opener(path)(path, "rt", encoding="utf-8", errors="replace") as handle:
-            lines = handle.readlines()
+            # L'en-tête est cherché dans les premières lignes, puis le fichier
+            # est parcouru en flux : un relevé national peut peser plusieurs
+            # centaines de Mo et ne doit jamais être chargé d'un bloc.
+            preamble = []
+            for _ in range(20):
+                line = handle.readline()
+                if not line:
+                    break
+                preamble.append(line)
+            columns = _Columns.find(preamble)
+            if columns is None:
+                log.warning(
+                    "en-tête de colonnes introuvable, relevé ignoré", extra={"path": str(path)}
+                )
+                return
+            lines = chain(preamble, handle)
 
-        columns = _Columns.find(lines[:20])
-        if columns is None:
-            log.warning("en-tête de colonnes introuvable, relevé ignoré", extra={"path": str(path)})
-            return
+            current_prefix: str | None = None
+            count = 0
+            for line in lines:
+                if len(line) <= columns.next_hop:
+                    continue
+                network_field = line[: columns.next_hop]
+                prefix_match = _PREFIX_RE.search(network_field)
+                if prefix_match:
+                    current_prefix = prefix_match.group(0)
+                prefix = current_prefix
+                if not prefix:
+                    continue  # aucune route encore vue : en-tête, ligne vide, préambule
 
-        current_prefix: str | None = None
-        count = 0
-        for line in lines:
-            if len(line) <= columns.next_hop:
-                continue
-            network_field = line[: columns.next_hop]
-            prefix_match = _PREFIX_RE.search(network_field)
-            if prefix_match:
-                current_prefix = prefix_match.group(0)
-            prefix = current_prefix
-            if not prefix:
-                continue  # aucune route encore vue : en-tête, ligne vide, préambule
+                next_hop_match = _NEXT_HOP_RE.search(line[columns.next_hop : columns.path])
+                if not next_hop_match:
+                    continue
+                next_hop = next_hop_match.group(0)
 
-            next_hop_match = _NEXT_HOP_RE.search(line[columns.next_hop : columns.path])
-            if not next_hop_match:
-                continue
-            next_hop = next_hop_match.group(0)
+                as_path = _as_path_tokens(line[columns.path :])
+                if not as_path:
+                    continue
 
-            as_path = _as_path_tokens(line[columns.path :])
-            if not as_path:
-                continue
+                try:
+                    prefix_len = int(prefix.split("/", 1)[1])
+                except (IndexError, ValueError):
+                    continue
 
-            try:
-                prefix_len = int(prefix.split("/", 1)[1])
-            except (IndexError, ValueError):
-                continue
-
-            origin_asn = as_path[-1]
-            peer_asn = as_path[0]  # limite documentée en tête de module
-            count += 1
-            yield {
-                "ts": snapshot_ts,
-                "collector": collector,
-                "peer_asn": peer_asn,
-                "peer_ip": next_hop,
-                "elem_type": "R",
-                "prefix": prefix,
-                "prefix_ip_version": 4,
-                "prefix_len": prefix_len,
-                "as_path_raw": as_path,
-                "as_path_dedup": _dedup_consecutive(as_path),
-                "as_path_len": len(as_path),
-                "origin_asn": origin_asn,
-                "next_hop": next_hop,
-                "communities": None,
-                "med": None,
-                "local_pref": None,
-                "source_file": path.name,
-            }
+                origin_asn = as_path[-1]
+                peer_asn = as_path[0]  # limite documentée en tête de module
+                count += 1
+                yield {
+                    "ts": snapshot_ts,
+                    "collector": collector,
+                    "peer_asn": peer_asn,
+                    "peer_ip": next_hop,
+                    "elem_type": "R",
+                    "prefix": prefix,
+                    "prefix_ip_version": 4,
+                    "prefix_len": prefix_len,
+                    "as_path_raw": as_path,
+                    "as_path_dedup": _dedup_consecutive(as_path),
+                    "as_path_len": len(as_path),
+                    "origin_asn": origin_asn,
+                    "next_hop": next_hop,
+                    "communities": None,
+                    "med": None,
+                    "local_pref": None,
+                    "source_file": path.name,
+                }
 
         log.info("relevé PCH lu", extra={"path": str(path), "routes": count})
