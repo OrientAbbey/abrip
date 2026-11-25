@@ -97,7 +97,7 @@ Ce fichier est le carnet d’exécution des améliorations listées dans `docs/a
 - [x] `Dockerfile` : `uv==0.13.1` installé puis `uv sync --locked --no-dev`, sans cache conservé, `PATH` pointant sur `/app/.venv/bin`.
 - [x] Étapes, utilisateur non-root, healthcheck et point d’entrée inchangés.
 - [x] `uv.lock` copié dans l’image et verrouillage réellement utilisé (`--locked` échoue si le verrou diverge).
-- [ ] Construction de l’image : **non exécutée**, Docker n’est pas installé sur ce poste (`docker` introuvable). Le job CI `image` la validera au premier passage.
+- [x] Construction de l’image validée par la CI (job `Construction de l’image`, 1 min 16 s) : build puis démarrage et interrogation du service. Docker reste absent du poste local, la vérification est donc faite en CI.
 
 ### 2.6 Pre-commit — **fait**
 - [x] Configuration légère `.pre-commit-config.yaml` en hooks `local` : Ruff lint (avec `--fix`), Ruff format et Mypy.
@@ -120,7 +120,7 @@ Ce fichier est le carnet d’exécution des améliorations listées dans `docs/a
 | `npm run build` | OK |
 | Budget gzip mesuré | 245 163 octets (plafond 256 000) |
 | `abrip demo verify` | rappel 1.0, 5/5 |
-| Construction Docker | non testée localement (Docker absent) |
+| Construction Docker | validée en CI (build + service interrogé, 1 min 16 s) |
 
 ## Journal d’exécution
 
@@ -136,9 +136,10 @@ Ce fichier est le carnet d’exécution des améliorations listées dans `docs/a
 | 2026-11-25 | Garde-fous CI | `ci.yml`, `dependabot.yml`, `.pre-commit-config.yaml`, `Dockerfile`, `Makefile`, frontend | YAML valide ; `pip-audit` sans vulnérabilité |
 | 2026-11-25 | Couverture mesurée | `pyproject.toml`, `ci.yml`, `.gitignore` | 81,03 % ; seuil 80 % ; `coverage report` sort en succès |
 | 2026-11-25 | Stabilité des agrégats | `api/routers/explore.py`, `api/routers/metrics.py` | 316 tests d’équivalence OK, trois exécutions stables |
+| 2026-11-25 | Fusion PR #4 | `main` (commit `ce0d650`) | CI verte sur `main` : Python 2 min 7 s, frontend 11 s, image 1 min 16 s |
 
 ## Bilan
 
 - **Lot 1 :** terminé et vérifié (seule réserve : les réponses `dict` ad hoc conservent des datetimes naïfs, interprétés comme UTC par le frontend).
-- **Lot 2 :** formatage, couverture, tests frontend, audits, Dependabot, pre-commit et Dockerfile faits. Restent deux vérifications d’environnement : construction de l’image Docker (Docker absent du poste, job CI dédié) et smoke test navigateur Playwright (reporté, documenté).
+- **Lot 2 :** formatage, couverture, tests frontend, audits, Dependabot, pre-commit et Dockerfile faits. L’image est construite et démarrée en CI. Reste une vérification d’environnement : smoke test navigateur Playwright (reporté, documenté).
 - **Points reportés :** sections 3 et 4 de `docs/ameliorations-proposees.md`.
