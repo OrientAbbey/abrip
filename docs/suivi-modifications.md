@@ -235,6 +235,18 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 - [x] Re-mesure avec 4 workers sur le jeu de démonstration : 3,6 req/s et p95 8,21 s à 10 utilisateurs, contre 4,3 req/s et 9,39 s avec un worker — aucun gain de débit sur cette machine à cœur partagé. Résultat et limites consignés dans `docs/performances.md`.
 - [x] Documentation : chaque worker a son propre cache et ses propres compteurs Prometheus ; un scrape ne représente qu'un processus.
 
+## Lot 11 — Finitions de sécurité et clavier — **terminé**
+
+### 11.1 Limitation de débit — **fait**
+- [x] `api.rate_limit_per_minute` (défaut `0`, désactivé) et `api/rate_limit.py` : fenêtre glissante par adresse client, verrouillée et testable avec une horloge injectable.
+- [x] Au-delà de la limite : réponse 429 au format d'erreur normalisé, corps `{"code": "rate_limited", ...}` et en-tête `Retry-After`. `/api/health` et `/api/metrics` sont exemptés.
+- [x] Les 429 sont comptés dans les métriques Prometheus (le limiteur est placé avant l'observabilité). Limite locale à chaque worker, documentée.
+- [x] Test : 6 cas (fenêtre, par client, 429 HTTP, supervision exempte, comptage, défaut inchangé).
+
+### 11.2 Interactions clavier — **fait**
+- [x] `frontend/e2e/clavier.spec.ts` rejoint les éléments uniquement avec Tab : onglets ARIA d'une fiche AS pilotés aux flèches, Début et Fin ; modale ouverte avec Entrée et fermée avec Échap, avec retour du focus sur le déclencheur.
+- [x] Vérification : 12 parcours Playwright OK (4 accessibilité, 6 smoke, 2 clavier), `npm run typecheck` OK.
+
 ## Vérification finale du lot 1 + 2
 
 | Vérification | Résultat |
@@ -250,11 +262,13 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 | `tests/test_securite_http.py`, `test_recherche_litterale.py` | 40 tests ciblés au total avec API/noms AS, dont en-têtes, clé API et jokers SQL ; 2 tests CSP ajoutés au lot 6 |
 | `tests/test_http_cache.py`, `test_acces_donnees.py` | 11 tests : gzip, ETag/304, `no-store` de la santé, réutilisation des connexions DuckDB |
 | `frontend/e2e/accessibilite.spec.ts` | 4 pages auditées par axe (WCAG 2.0/2.1 A et AA), zéro violation |
+| `frontend/e2e/clavier.spec.ts` | 2 parcours : onglets aux flèches/Début/Fin, modale Entrée/Échap et retour du focus |
 | `scripts/bench/run_charge.py` | Générateur async sans dépendance : `--users`, `--duration`, `--think`, `--json` ; rapport p50/p95/p99 par endpoint |
 | `tests/test_retention.py` | 7 tests : plan de purge, dates invalides ignorées, simulation, purge effective, nettoyage du catalogue, CLI |
 | `tests/test_metriques_prometheus.py` | 8 tests : `X-Request-ID`, corrélation JSON, format Prometheus, seaux cumulatifs, jauges, modèles de route |
 | `tests/test_api_workers.py` | 5 tests : option CLI, configuration, incompatibilité `--reload`, refus de `--workers 0` |
-| `npm run test:e2e` | 10 parcours Playwright OK (4 accessibilité, 6 smoke ; dont 1 exécution en mode CI) |
+| `tests/test_limite_debit.py` | 6 tests : fenêtre glissante, limite par client, 429, exemption supervision, comptage 429, défaut désactivé |
+| `npm run test:e2e` | 12 parcours Playwright OK (4 accessibilité, 6 smoke, 2 clavier ; dont 1 exécution en mode CI) |
 | `npm run typecheck` | OK (src, e2e et configurations) |
 | `npm run build` | OK |
 | Budget gzip mesuré | 259 328 octets (plafond relevé à 270 000) |
@@ -290,6 +304,7 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 | 2026-11-26 | Lot 8 — rétention des couches dérivées | `config.py`, `storage/retention.py`, `cli.py`, `tests/test_retention.py`, `docs/deploiement.md` | `etl purge` simulé par défaut, `--apply` explicite, catalogue nettoyé ; 7 tests dédiés |
 | 2026-11-26 | Lot 9 — observabilité | `api/{main,metrics}.py`, `logging_conf.py`, `tests/test_metriques_prometheus.py`, `docs/deploiement.md` | `X-Request-ID` corrélé aux logs, métriques Prometheus sans dépendance ; 8 tests dédiés et 10 parcours navigateur OK |
 | 2026-11-26 | Lot 10 — montée en workers | `config.py`, `cli.py`, `tests/test_api_workers.py`, `docs/{deploiement,performances}.md` | `--workers` et `api.workers`, garde-fous CLI ; 5 tests, re-mesure sans gain de débit sur un cœur partagé |
+| 2026-11-26 | Lot 11 — finitions de sécurité | `config.py`, `api/{main,rate_limit}.py`, `tests/test_limite_debit.py`, `e2e/clavier.spec.ts` | 429 avec `Retry-After` et exemption supervision ; 6 tests Python, 2 parcours clavier, 12 parcours au total |
 
 ## Bilan
 
@@ -303,4 +318,5 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 - **Lot 8 :** terminé : rétention des couches curées et analytiques avec purge simulée par défaut et nettoyage du catalogue ; la compaction existante reste documentée.
 - **Lot 9 :** terminé : identifiant de requête corrélé aux logs et exposition Prometheus des latences, erreurs et volumes stockés.
 - **Lot 10 :** terminé : service multi-processus configurable, avec mesure locale montrant l'absence de gain sur un cœur partagé et la limitation des métriques à un worker.
-- **Points reportés :** limitation de débit, tests d'interactions clavier, précalcul des endpoints coûteux, ainsi que les autres pistes produit de la section 3.
+- **Lot 11 :** terminé : limitation de débit configurable et parcours clavier automatisés ; les points 1, 2 et 4 de la feuille de route sont désormais tous traités.
+- **Points reportés :** précalcul des endpoints coûteux et autres pistes produit de la section 3.

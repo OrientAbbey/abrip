@@ -142,6 +142,9 @@ class ApiSettings(BaseModel):
     # cache en mémoire sont alors partagés par toutes les requêtes. Au-delà,
     # chaque processus a son propre cache et ses propres compteurs Prometheus.
     workers: int = 1
+    # Requêtes par minute et par adresse, 0 = aucune limite. Limite locale à
+    # chaque worker ; la supervision (/health, /metrics) en est exemptée.
+    rate_limit_per_minute: int = 0
     static_dir: str = "frontend/dist"
 
 

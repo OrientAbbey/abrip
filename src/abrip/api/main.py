@@ -25,6 +25,7 @@ from fastapi.staticfiles import StaticFiles
 from abrip import __version__
 from abrip.api.deps import api_key_matches, verify_api_key
 from abrip.api.metrics import observe, render
+from abrip.api.rate_limit import RateLimiter
 from abrip.api.routers import asn_explorer, events, explore, metrics, propagation, system
 from abrip.config import Settings, get_settings
 from abrip.logging_conf import current_request_id, get_logger, setup_logging
@@ -180,6 +181,30 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # sur le JSON non compressé, d'où l'étiquette faible (valable quel que soit
     # l'encodage négocié).
     app.add_middleware(GZipMiddleware, minimum_size=GZIP_MIN_SIZE)
+
+    # Limiteur avant l'observabilité : les 429 sont donc comptés comme les
+    # autres réponses. La supervision reste toujours accessible.
+    limiter = (
+        RateLimiter(settings.api.rate_limit_per_minute)
+        if settings.api.rate_limit_per_minute
+        else None
+    )
+
+    @app.middleware("http")
+    async def rate_limit(request: Request, call_next):
+        if limiter is None or request.url.path in {"/api/health", "/api/metrics"}:
+            return await call_next(request)
+        allowed, retry_after = limiter.allow(request.client.host if request.client else "inconnu")
+        if not allowed:
+            response = _error(
+                429,
+                "rate_limited",
+                "Trop de requêtes. Réessayez dans quelques instants.",
+                {"retry_after": retry_after},
+            )
+            response.headers["Retry-After"] = str(retry_after)
+            return response
+        return await call_next(request)
 
     # Observabilité ajoutée après la compression : Starlette la place donc en
     # tête de pile, elle voit le statut final (304 compris) et couvre aussi les
