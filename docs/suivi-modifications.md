@@ -264,6 +264,19 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 - [x] Page React « Qualité des données » chargée à la demande, ajoutée à la navigation, avec tableaux et états vides. Contrat frontend typé à la main dans `lib/types.ts`.
 - [x] Test : 3 tests API (jeu de démo, journal d'ingestion, installation vierge), schéma OpenAPI vérifié, 14 parcours Playwright (5 accessibilité, 7 smoke, 2 clavier) et budget gzip 253 927 octets sous la limite de 270 000.
 
+## Lot 14 — Précalcul des endpoints coûteux — **terminé**
+
+### 14.1 Fiches AS — **fait**
+- [x] `analytics/precompute.py` construit `asn_prefix_stats` (asn, prefix, mises à jour, première/dernière date, pairs distincts) en une passe DuckDB bornée en mémoire, avec écriture atomique et journalisation dans le catalogue.
+- [x] `GET /api/asns/{asn}` lit cette table si elle est plus récente que toutes les partitions curées, sinon retombe sur l'ancien regroupement de `bgp_elements`. Aucun changement de contrat.
+- [x] `abrip analytics precompute` (à relancer après chaque curation), documenté dans `docs/deploiement.md`.
+- [x] Test : égalité stricte entre les deux chemins sur le jeu de démo, API avant/après précalcul, commande CLI.
+
+### 14.2 Préchauffage de la vue d'ensemble — **fait**
+- [x] `api.prewarm` (`ABRIP_API__PREWARM=true`, défaut `false`) remplit le cache de la synthèse 7 jours au démarrage de chaque worker ; le pic du premier appel est déplacé vers le démarrage, pas supprimé.
+- [x] Test : le générateur de la vue d'ensemble est appelé une fois avec `days=7` quand l'option est active.
+- [x] Vérification : 4 tests dédiés et 360 tests API/contrat/analytics existants OK. Gain à 50 M de lignes non re-mesuré (section « Précalcul » de `docs/performances.md`).
+
 ## Vérification finale du lot 1 + 2
 
 | Vérification | Résultat |
@@ -287,6 +300,7 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 | `tests/test_limite_debit.py` | 6 tests : fenêtre glissante, limite par client, 429, exemption supervision, comptage 429, défaut désactivé |
 | `tests/test_alerting.py` | 6 tests : sévérité, déduplication, échec HTTP, webhook absent, incidents récents, commande CLI |
 | `tests/test_qualite_donnees.py` | 3 tests : contrat de `/api/quality`, journal d'ingestion, installation vierge |
+| `tests/test_precalcul.py` | 4 tests : équivalence précalcul/calcul direct, fiche AS avant/après, commande CLI, préchauffage |
 | `npm run test:e2e` | 14 parcours Playwright OK (5 accessibilité, 7 smoke, 2 clavier ; dont 1 exécution en mode CI) |
 | `npm run typecheck` | OK (src, e2e et configurations) |
 | `npm run build` | OK |
@@ -326,6 +340,7 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 | 2026-11-26 | Lot 11 — finitions de sécurité | `config.py`, `api/{main,rate_limit}.py`, `tests/test_limite_debit.py`, `e2e/clavier.spec.ts` | 429 avec `Retry-After` et exemption supervision ; 6 tests Python, 2 parcours clavier, 12 parcours au total |
 | 2026-11-26 | Lot 12 — alerting | `config.py`, `alerting.py`, `cli.py`, `storage/catalog.py`, `tests/test_alerting.py`, `docs/deploiement.md` | Webhook Slack, déduplication par incident, `--notify` et `detect alert` ; 6 tests sans réseau |
 | 2026-11-26 | Lot 13 — qualité des données | `api/schemas.py`, `api/routers/system.py`, `pages/Quality.tsx`, `App.tsx`, `Layout.tsx`, `tests/test_qualite_donnees.py` | `/api/quality` typé et page dédiée ; 3 tests API, 14 parcours navigateur |
+| 2026-11-26 | Lot 14 — précalcul | `analytics/precompute.py`, `api/{main,deps}.py`, `api/routers/{explore,system}.py`, `cli.py`, `tests/test_precalcul.py` | `asn_prefix_stats`, bascule automatique et `api.prewarm` ; 4 tests dédiés |
 
 ## Bilan
 
@@ -342,4 +357,5 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 - **Lot 11 :** terminé : limitation de débit configurable et parcours clavier automatisés ; les points 1, 2 et 4 de la feuille de route sont désormais tous traités.
 - **Lot 12 :** terminé : alertes webhook sur incidents critiques avec déduplication persistée, sans réseau dans les tests.
 - **Lot 13 :** terminé : tableau de qualité des données exposé dans l'API et dans l'interface, sans recalcul.
-- **Points reportés :** boucle de qualification humaine L5, détection sub-horaire et précalcul des endpoints coûteux.
+- **Lot 14 :** terminé : précalcul des préfixes par AS avec bascule automatique et préchauffage optionnel de la vue d'ensemble.
+- **Points reportés :** boucle de qualification humaine L5 et détection sub-horaire ; toutes les autres pistes des sections 1, 2 et 4 sont traitées.

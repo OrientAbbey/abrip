@@ -259,6 +259,15 @@ def analytics_compute(
     console.print(json.dumps(written, indent=2))
 
 
+@analytics_app.command("precompute")
+def analytics_precompute() -> None:
+    """Prépare la table des préfixes par AS utilisée par les fiches AS."""
+    settings, catalog = _bootstrap_runtime()
+    from abrip.analytics.precompute import build_asn_prefix_stats
+
+    console.print(json.dumps(build_asn_prefix_stats(settings, catalog), indent=2))
+
+
 # --- détection -------------------------------------------------------------
 @detect_app.command("run")
 def detect_run(

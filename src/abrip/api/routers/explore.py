@@ -7,6 +7,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from abrip.analytics.daily import PREFIX_ORIGIN, summary_is_current
+from abrip.analytics.precompute import ASN_PREFIX_STATS, stats_is_current
 from abrip.api.deps import DataAccess, clamp_limit, get_data_access
 from abrip.api.schemas import (
     AsnDetail,
@@ -28,6 +29,7 @@ from abrip.api.schemas import (
     VisibilitySnapshot,
 )
 from abrip.api.search import escape_like
+from abrip.config import get_settings
 
 router = APIRouter(tags=["exploration"])
 
@@ -159,14 +161,23 @@ def list_asns(
 
 @router.get("/asns/{asn}", response_model=AsnDetail, summary="Fiche d'un système autonome")
 def asn_detail(asn: int, data: DataAccess = Depends(get_data_access)) -> AsnDetail:
-    elements = data.table("bgp_elements")
-    prefixes = data.query(
-        f"""SELECT prefix, count(*) AS updates, min(ts) AS first_seen, max(ts) AS last_seen,
-                   count(DISTINCT peer_asn) AS peers
-            FROM {elements} WHERE origin_asn = ? AND elem_type = 'A'
-            GROUP BY 1 ORDER BY updates DESC LIMIT 200""",
-        [asn],
-    )
+    settings = get_settings()
+    if data.exists(ASN_PREFIX_STATS) and stats_is_current(settings):
+        prefixes = data.query(
+            f"""SELECT prefix, updates, first_seen, last_seen, peers
+                FROM {data.table(ASN_PREFIX_STATS)} WHERE asn = ?
+                ORDER BY updates DESC LIMIT 200""",
+            [asn],
+        )
+    else:
+        elements = data.table("bgp_elements")
+        prefixes = data.query(
+            f"""SELECT prefix, count(*) AS updates, min(ts) AS first_seen, max(ts) AS last_seen,
+                       count(DISTINCT peer_asn) AS peers
+                FROM {elements} WHERE origin_asn = ? AND elem_type = 'A'
+                GROUP BY 1 ORDER BY updates DESC LIMIT 200""",
+            [asn],
+        )
     if not prefixes:
         raise HTTPException(
             status_code=404,

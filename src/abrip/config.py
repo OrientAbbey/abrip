@@ -145,6 +145,10 @@ class ApiSettings(BaseModel):
     # Requêtes par minute et par adresse, 0 = aucune limite. Limite locale à
     # chaque worker ; la supervision (/health, /metrics) en est exemptée.
     rate_limit_per_minute: int = 0
+    # Pré-remplit le cache de la vue d'ensemble au démarrage (un worker = un
+    # cache) : évite le pic de latence du premier appel, au prix d'un démarrage
+    # un peu plus long.
+    prewarm: bool = False
     static_dir: str = "frontend/dist"
 
 

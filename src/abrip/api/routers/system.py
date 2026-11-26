@@ -186,6 +186,11 @@ def overview(
     return data.cached(f"overview:{days}", lambda: _build_overview(data, days))
 
 
+def warm_overview(data: DataAccess) -> None:
+    """Remplit le cache de la synthèse par défaut (7 jours) au démarrage."""
+    data.cached("overview:7", lambda: _build_overview(data, 7))
+
+
 def _build_overview(data: DataAccess, days: int) -> Overview:
     elements = data.table("bgp_elements")
     bounds = data.query(f"SELECT min(ts) AS a, max(ts) AS b FROM {elements}")[0]

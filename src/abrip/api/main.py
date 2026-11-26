@@ -23,7 +23,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from abrip import __version__
-from abrip.api.deps import api_key_matches, verify_api_key
+from abrip.api.deps import DataAccess, api_key_matches, verify_api_key
 from abrip.api.metrics import observe, render
 from abrip.api.rate_limit import RateLimiter
 from abrip.api.routers import asn_explorer, events, explore, metrics, propagation, system
@@ -294,6 +294,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return _error(404, "not_found", f"Route inconnue : /api/{path}")
 
     _mount_frontend(app, settings)
+    if settings.api.prewarm:
+        system.warm_overview(DataAccess(settings))
     return app
 
 
