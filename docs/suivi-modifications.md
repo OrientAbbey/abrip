@@ -203,6 +203,16 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 - [x] Rapport : nombre de requêtes, débit, erreurs réseau et réponses non-200, p50/p95/p99 par endpoint et global.
 - [x] Mesure locale de référence consignée dans `docs/performances.md` : 2,2 → 4,3 req/s de 1 à 5 utilisateurs, puis plateau à 4,3 req/s à 10 utilisateurs avec un p95 passant de 1,25 s à 9,39 s. Mono-processus et DuckDB monocœur expliquent la limite ; non joué en CI.
 
+## Lot 8 — Rétention des couches dérivées — **terminé**
+
+### 8.1 Politique et commande de purge — **fait**
+- [x] `etl.retention_days` (90 jours par défaut) s'ajoute à la rétention brute existante (`ingestion.raw_retention_days`, 30 jours). Curés et analytiques partagent la même fenêtre pour ne pas rendre les tables journalières incompatibles avec les partitions sources.
+- [x] `storage/retention.py` : plan ne considérant que les répertoires `date=AAAA-MM-JJ` strictement antérieurs à la date limite ; noms de dates validés, liens symboliques ignorés, aucun chemin configuré supprimable.
+- [x] `abrip etl purge` simule par défaut et n'efface qu'avec `--apply` ; `--days` réduit ponctuellement la fenêtre. Bilan JSON : répertoires, fichiers, octets et lignes du catalogue.
+- [x] Les entrées `curated_partitions` correspondant aux répertoires supprimés sont retirées du catalogue.
+- [x] La compaction reste `abrip etl compact` : tri et fusion des fragments en un fichier par partition ; procédure décrite dans `docs/deploiement.md`.
+- [x] Vérification : 7 tests dédiés (plan, simulation, purge effective, catalogue, CLI) et suite ETL existante OK.
+
 ## Vérification finale du lot 1 + 2
 
 | Vérification | Résultat |
@@ -219,6 +229,7 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 | `tests/test_http_cache.py`, `test_acces_donnees.py` | 11 tests : gzip, ETag/304, `no-store` de la santé, réutilisation des connexions DuckDB |
 | `frontend/e2e/accessibilite.spec.ts` | 4 pages auditées par axe (WCAG 2.0/2.1 A et AA), zéro violation |
 | `scripts/bench/run_charge.py` | Générateur async sans dépendance : `--users`, `--duration`, `--think`, `--json` ; rapport p50/p95/p99 par endpoint |
+| `tests/test_retention.py` | 7 tests : plan de purge, dates invalides ignorées, simulation, purge effective, nettoyage du catalogue, CLI |
 | `npm run test:e2e` | 9 parcours Playwright OK (4 accessibilité, 5 smoke ; dont 1 exécution en mode CI) |
 | `npm run typecheck` | OK (src, e2e et configurations) |
 | `npm run build` | OK |
@@ -252,6 +263,7 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 | 2026-11-26 | Lot 5 — optimisation HTTP | `api/{main,deps}.py`, `tests/{test_http_cache,test_acces_donnees}.py`, `docs/performances.md` | gzip, ETag/304, santé `no-store`, connexions DuckDB par thread ; 11 tests dédiés et 49 tests ciblés OK |
 | 2026-11-26 | Lot 6 — accessibilité et CSP | `api/main.py`, `src/styles.css`, `e2e/{accessibilite,smoke}.spec.ts`, `tests/test_securite_http.py` | 55 problèmes de contraste corrigés, axe WCAG sur 4 pages, CSP sur la SPA ; 21 tests Python et 9 parcours navigateur OK |
 | 2026-11-26 | Lot 7 — mesure de concurrence | `scripts/bench/run_charge.py`, `docs/performances.md` | 2,2 à 4,3 req/s selon la concurrence ; p95 de 1,25 s à 9,39 s sur le jeu de démonstration |
+| 2026-11-26 | Lot 8 — rétention des couches dérivées | `config.py`, `storage/retention.py`, `cli.py`, `tests/test_retention.py`, `docs/deploiement.md` | `etl purge` simulé par défaut, `--apply` explicite, catalogue nettoyé ; 7 tests dédiés |
 
 ## Bilan
 
@@ -262,4 +274,5 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 - **Lot 5 :** terminé pour le transport HTTP (gzip, ETag/304, connexions DuckDB par thread) ; les gains n'ont pas été re-mesurés sur les jeux à 50 M de lignes.
 - **Lot 6 :** terminé : contrôles WCAG automatisés dans Playwright, contrastes corrigés et CSP sur le HTML de la SPA ; la limitation de débit reste à étudier.
 - **Lot 7 :** terminé : test de charge asyncio reproductible et première mesure de concurrence, consignée dans `docs/performances.md`.
-- **Points reportés :** rétention et compaction, limitation de débit, tests d'interactions clavier, montée en workers pour la concurrence, ainsi que les autres pistes produit de la section 3.
+- **Lot 8 :** terminé : rétention des couches curées et analytiques avec purge simulée par défaut et nettoyage du catalogue ; la compaction existante reste documentée.
+- **Points reportés :** limitation de débit, tests d'interactions clavier, montée en workers pour la concurrence, ainsi que les autres pistes produit de la section 3.

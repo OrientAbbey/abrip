@@ -305,6 +305,26 @@ par le calcul direct, plus lent mais identique.
 
 Détails et mesures : [performances.md](performances.md).
 
+### Rétention des couches dérivées
+
+La couche brute est purgée par `abrip ingest purge` (30 jours par défaut). Les
+Parquet curés et analytiques sont conservés `etl.retention_days` jours (90 par
+défaut, réglable dans `configs/settings.yaml`). La purge n'est **jamais**
+automatique : on simule, puis on applique.
+
+```bash
+abrip etl purge                 # simulation : partitions, fichiers, octets et lignes de catalogue
+abrip etl purge --apply         # suppression effective
+abrip etl purge --days 30 --apply   # fenêtre ponctuellement plus courte
+```
+
+Seuls les répertoires `date=AAAA-MM-JJ` antérieurs à la date limite sont
+supprimés, avec les entrées correspondantes du catalogue. Les deux couches
+partagent la même fenêtre : garder moins de jours curés que de jours analytiques
+ferait recalculer directement certaines pages, plus lentement. La compaction
+reste assurée par `abrip etl compact` (tri et fusion des fragments en un seul
+fichier par partition), à relancer après une curation d'anciennes dates.
+
 ### Premier essai réel : un collecteur, un jour
 
 Le parcours sur données réelles n'a pas pu être exécuté de bout en bout par les auteurs : l'environnement de développement n'atteint ni RouteViews, ni RIPE, ni IODA, ni PeeringDB. Ce qui est vérifié, c'est le comportement **quand les sources sont injoignables** (tests `tests/test_hors_demo.py` et essai manuel) ; ce qui ne l'est pas, c'est le succès sur de vraies archives. Commencez petit, depuis un poste qui a accès à Internet :
