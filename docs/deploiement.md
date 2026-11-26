@@ -296,12 +296,19 @@ formes. Après la mise à jour, une seule fois :
 ```bash
 abrip etl compact        # trie les anciennes partitions ; idempotent
 abrip analytics compute --from <premier jour> --to <dernier jour>   # tables journalières
+abrip analytics precompute                                          # fiches AS
 ```
 
 La seconde commande produit les tables journalières (`daily_prefix_origin`,
-`daily_adjacency`) qui rendent rapides les pages par AS et la liste des préfixes. Sans
-elles — ou après une nouvelle curation, qui les rend périmées — l'API répond quand même,
-par le calcul direct, plus lent mais identique.
+`daily_adjacency`) qui rendent rapides les pages par AS et la liste des préfixes.
+La troisième prépare les fiches AS : `asn_prefix_stats` est recalculée en une
+passe et l'API la juge périmée dès qu'une partition curée est plus récente. Sans
+ces tables — ou après une nouvelle curation — l'API répond quand même, par le
+calcul direct, plus lent mais identique.
+
+La vue d'ensemble peut être préchauffée dans chaque worker au démarrage avec
+`ABRIP_API__PREWARM=true` : cela évite le pic de latence du premier appel, mais
+allonge le démarrage du service.
 
 Détails et mesures : [performances.md](performances.md).
 

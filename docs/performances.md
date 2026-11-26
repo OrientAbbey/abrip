@@ -132,12 +132,30 @@ pourtant dans de petites tables, une par jour (`analytics/daily.py`) :
 - Ces changements n'ont pas été re-mesurés sur les jeux de 50 M de lignes : les
   temps du tableau ci-dessus restent ceux du calcul seul, sans transport.
 
+## Précalcul des fiches AS
+
+`abrip analytics precompute` écrit une table `asn_prefix_stats` (une ligne par
+`asn`, `prefix` : mises à jour, première et dernière date, pairs distincts) en
+une seule passe sur `bgp_elements`. La fiche d'un AS la lit au lieu de
+regrouper les cinquante millions de lignes à chaque appel ; à défaut de table
+courante, l'API retombe sur l'ancien calcul direct, sans changement de réponse.
+La table est jugée périmée dès qu'une partition curée est plus récente qu'elle.
+
+La vue d'ensemble peut être préchauffée au démarrage de chaque worker avec
+`ABRIP_API__PREWARM=true` : le cache mémoire de la synthèse 7 jours est rempli
+avant le premier appel, au prix d'un démarrage un peu plus long. Cela déplace le
+coût, il ne le supprime pas.
+
+Les tests vérifient l'égalité stricte entre les deux chemins sur le jeu de
+démo (`tests/test_precalcul.py`) ; le gain à 50 M de lignes n'a pas été
+re-mesuré après cette passe.
+
 ## Ce qui ne passe pas encore à l'échelle
 
 | Point | Constat à 50 M de lignes | Piste |
 |---|---|---|
-| Fiche d'un AS | 1,1 s (`updates`, premier et dernier instant, pairs **distincts** : ce dernier ne se déduit pas d'agrégats journaliers) | une table (jour, préfixe, origine, pair), nettement plus volumineuse |
-| Vue d'ensemble, premier appel | 3,6 s, puis mis en cache | idem |
+| Fiche d'un AS | 1,1 s avant précalcul ; la table `asn_prefix_stats` évite le regroupement à chaque appel | `abrip analytics precompute` après chaque curation ; gain à 50 M non re-mesuré |
+| Vue d'ensemble, premier appel | 3,6 s, puis mis en cache | `ABRIP_API__PREWARM=true` déplace le coût au démarrage |
 | Rejeu d'un préfixe très bavard | 2,5 s | agréger les tranches côté DuckDB |
 | Calcul des tables et des métriques | non mesuré sur de vrais MRT | à mesurer sur ton poste |
 
