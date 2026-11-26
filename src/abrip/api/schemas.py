@@ -65,6 +65,41 @@ class Health(ApiModel):
     last_run: dict[str, Any] | None = None
 
 
+class SourceFreshness(ApiModel):
+    collector: str
+    file_type: str
+    files: int
+    oldest: datetime | None = None
+    newest: datetime | None = None
+    age_days: int | None = None
+
+
+class CountryCoverage(ApiModel):
+    country_iso2: str
+    asns: int
+    african: bool
+
+
+class RoaSummary(ApiModel):
+    roas: int
+    prefixes: int
+
+
+class SilentCollector(ApiModel):
+    name: str
+    enabled: bool
+    last_file_ts: datetime | None = None
+    age_days: int | None = None
+
+
+class DataQuality(ApiModel):
+    generated_at: datetime
+    sources: list[SourceFreshness]
+    countries: list[CountryCoverage]
+    roa: RoaSummary
+    silent_collectors: list[SilentCollector]
+
+
 class CollectorInfo(ApiModel):
     name: str
     project: str
