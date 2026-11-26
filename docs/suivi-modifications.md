@@ -213,6 +213,19 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 - [x] La compaction reste `abrip etl compact` : tri et fusion des fragments en un fichier par partition ; procédure décrite dans `docs/deploiement.md`.
 - [x] Vérification : 7 tests dédiés (plan, simulation, purge effective, catalogue, CLI) et suite ETL existante OK.
 
+## Lot 9 — Observabilité — **terminé**
+
+### 9.1 Identifiant de requête — **fait**
+- [x] Middleware HTTP générant un UUID (ou reprenant un `X-Request-ID` client court et sûr), renvoyé dans la réponse et propagé aux logs JSON via `current_request_id` (`logging_conf.py`).
+- [x] Test : identifiant généré ou echoé, valeur invalide remplacée, `request_id` présent dans le format JSON, en-tête présent même sur les parcours navigateur.
+
+### 9.2 Métriques Prometheus — **fait**
+- [x] `GET /api/metrics` (hors OpenAPI, protégé par la clé API globale) expose `abrip_http_requests_total`, un histogramme de durée à neuf seaux, et des jauges `abrip_data_files`/`abrip_data_bytes`/`abrip_data_age_days` par couche.
+- [x] Agrégation par **modèle de route** (`/api/asns/{asn}`) pour borner la cardinalité ; les seaux sont cumulatifs (un seul seau incrémenté par observation).
+- [x] Aucune dépendance ajoutée : registre local verrouillé et format texte Prometheus.
+- [x] Test : format HELP/TYPE, compteurs par route, cumul des seaux, jauges de couches, protection par clé ; 10 parcours navigateur OK.
+- [x] Configuration de scrape et usage de l'en-tête documentés dans `docs/deploiement.md`.
+
 ## Vérification finale du lot 1 + 2
 
 | Vérification | Résultat |
@@ -230,7 +243,8 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 | `frontend/e2e/accessibilite.spec.ts` | 4 pages auditées par axe (WCAG 2.0/2.1 A et AA), zéro violation |
 | `scripts/bench/run_charge.py` | Générateur async sans dépendance : `--users`, `--duration`, `--think`, `--json` ; rapport p50/p95/p99 par endpoint |
 | `tests/test_retention.py` | 7 tests : plan de purge, dates invalides ignorées, simulation, purge effective, nettoyage du catalogue, CLI |
-| `npm run test:e2e` | 9 parcours Playwright OK (4 accessibilité, 5 smoke ; dont 1 exécution en mode CI) |
+| `tests/test_metriques_prometheus.py` | 8 tests : `X-Request-ID`, corrélation JSON, format Prometheus, seaux cumulatifs, jauges, modèles de route |
+| `npm run test:e2e` | 10 parcours Playwright OK (4 accessibilité, 6 smoke ; dont 1 exécution en mode CI) |
 | `npm run typecheck` | OK (src, e2e et configurations) |
 | `npm run build` | OK |
 | Budget gzip mesuré | 259 328 octets (plafond relevé à 270 000) |
@@ -264,6 +278,7 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 | 2026-11-26 | Lot 6 — accessibilité et CSP | `api/main.py`, `src/styles.css`, `e2e/{accessibilite,smoke}.spec.ts`, `tests/test_securite_http.py` | 55 problèmes de contraste corrigés, axe WCAG sur 4 pages, CSP sur la SPA ; 21 tests Python et 9 parcours navigateur OK |
 | 2026-11-26 | Lot 7 — mesure de concurrence | `scripts/bench/run_charge.py`, `docs/performances.md` | 2,2 à 4,3 req/s selon la concurrence ; p95 de 1,25 s à 9,39 s sur le jeu de démonstration |
 | 2026-11-26 | Lot 8 — rétention des couches dérivées | `config.py`, `storage/retention.py`, `cli.py`, `tests/test_retention.py`, `docs/deploiement.md` | `etl purge` simulé par défaut, `--apply` explicite, catalogue nettoyé ; 7 tests dédiés |
+| 2026-11-26 | Lot 9 — observabilité | `api/{main,metrics}.py`, `logging_conf.py`, `tests/test_observabilite.py`, `docs/deploiement.md` | `X-Request-ID` corrélé aux logs, métriques Prometheus sans dépendance ; 8 tests dédiés et 10 parcours navigateur OK |
 
 ## Bilan
 
@@ -275,4 +290,5 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 - **Lot 6 :** terminé : contrôles WCAG automatisés dans Playwright, contrastes corrigés et CSP sur le HTML de la SPA ; la limitation de débit reste à étudier.
 - **Lot 7 :** terminé : test de charge asyncio reproductible et première mesure de concurrence, consignée dans `docs/performances.md`.
 - **Lot 8 :** terminé : rétention des couches curées et analytiques avec purge simulée par défaut et nettoyage du catalogue ; la compaction existante reste documentée.
+- **Lot 9 :** terminé : identifiant de requête corrélé aux logs et exposition Prometheus des latences, erreurs et volumes stockés.
 - **Points reportés :** limitation de débit, tests d'interactions clavier, montée en workers pour la concurrence, ainsi que les autres pistes produit de la section 3.

@@ -63,6 +63,14 @@ test("la liste des préfixes ouvre la fiche d'un préfixe", async ({ page }) => 
   expect(errors).toEqual([]);
 });
 
+test("les métriques et l'identifiant de requête sont exposés", async ({ page }) => {
+  const response = await page.request.get("/api/metrics");
+  expect(response.status()).toBe(200);
+  expect(response.headers()["content-type"]).toContain("text/plain");
+  expect(response.headers()["x-request-id"]).toBeTruthy();
+  expect(await response.text()).toContain("abrip_http_requests_total");
+});
+
 test("la CSP est appliquée sans bloquer le frontend", async ({ page }) => {
   const errors = watchErrors(page);
   const response = await page.goto("/");
