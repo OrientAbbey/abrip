@@ -1,0 +1,5 @@
+# Exemptions connues comme légitimes (L5). Versionné avec le dépôt.
+# Chaque entrée porte au moins `asn` ou `prefix`, et optionnellement `detector`
+# pour limiter l'exemption à un seul détecteur. Laisser vide tant qu'aucun cas
+# n'a été qualifié par un opérateur.
+entries: []

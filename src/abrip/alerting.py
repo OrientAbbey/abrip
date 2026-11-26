@@ -72,12 +72,21 @@ def _notify(
     incidents: list[Incident],
     client: Client,
 ) -> dict[str, int]:
+    from abrip.qualification import is_allowed, load_allowlist
+
     alerts = settings.alerts
     catalog.prune_alerts(alerts.dedupe_days)
+    allowlist = load_allowlist()
     candidates = [
         incident
         for incident in incidents
         if RANK[incident.severity.value] >= RANK[alerts.min_severity]
+        and not is_allowed(
+            allowlist,
+            prefix=incident.prefix,
+            asns=[],
+            detectors=incident.detectors,
+        )
     ]
     already = catalog.already_alerted([incident.incident_id for incident in candidates])
 

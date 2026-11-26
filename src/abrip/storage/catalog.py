@@ -61,6 +61,14 @@ CREATE TABLE IF NOT EXISTS curated_partitions (
     written_at    TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS event_feedback (
+    event_id   VARCHAR PRIMARY KEY,
+    verdict    VARCHAR NOT NULL,
+    author     VARCHAR NOT NULL,
+    note       VARCHAR,
+    created_at TIMESTAMP NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS alert_log (
     incident_id VARCHAR PRIMARY KEY,
     sent_at     TIMESTAMP NOT NULL
@@ -208,6 +216,38 @@ class Catalog:
                        run_id = excluded.run_id, written_at = excluded.written_at""",
                 [f"{table_name}:{path}", table_name, path, rows, size_bytes, run_id, _utcnow()],
             )
+
+    # --- qualification L5 ---------------------------------------------------
+    def record_feedback(
+        self, *, event_id: str, verdict: str, author: str, note: str | None = None
+    ) -> None:
+        if verdict not in {"legitimate", "misconfiguration", "malicious", "unknown"}:
+            raise ValueError(f"Verdict inconnu : {verdict}")
+        with self.connect() as con:
+            con.execute(
+                """INSERT INTO event_feedback (event_id, verdict, author, note, created_at)
+                   VALUES (?, ?, ?, ?, ?)
+                   ON CONFLICT (event_id) DO UPDATE SET
+                       verdict = excluded.verdict, author = excluded.author,
+                       note = excluded.note, created_at = excluded.created_at""",
+                [event_id, verdict, author, note, _utcnow()],
+            )
+
+    def all_feedback(self) -> list[dict[str, Any]]:
+        with self.connect() as con:
+            rows = con.execute(
+                "SELECT event_id, verdict, author, note, created_at FROM event_feedback"
+            ).fetchall()
+        return [
+            {
+                "event_id": row[0],
+                "verdict": row[1],
+                "author": row[2],
+                "note": row[3],
+                "created_at": row[4],
+            }
+            for row in rows
+        ]
 
     # --- alertes ------------------------------------------------------------
     def already_alerted(self, incident_ids: list[str]) -> set[str]:
