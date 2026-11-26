@@ -42,6 +42,29 @@ class TestEnTetesDeSecurite:
         assert "camera=()" in response.headers["Permissions-Policy"]
 
 
+class TestCSP:
+    @pytest.fixture
+    def client_avec_spa(self, tmp_path):
+        (tmp_path / "index.html").write_text("<!doctype html><html><body></body></html>", "utf-8")
+        settings = get_settings().model_copy(deep=True)
+        settings.api.static_dir = str(tmp_path)
+        return TestClient(create_app(settings))
+
+    def test_csp_sur_le_html_de_la_spa(self, client_avec_spa):
+        response = client_avec_spa.get("/")
+        assert response.status_code == 200
+        csp = response.headers["content-security-policy"]
+        assert "default-src 'self'" in csp
+        assert "script-src 'self'" in csp
+        assert "img-src 'self' data: blob:" in csp
+        assert "object-src 'none'" in csp
+
+    def test_pas_de_csp_sur_l_api(self, client_avec_spa):
+        response = client_avec_spa.get("/api/health")
+        assert response.status_code == 200
+        assert "content-security-policy" not in response.headers
+
+
 class TestCleApi:
     @pytest.fixture
     def protege(self, monkeypatch):

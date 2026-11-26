@@ -52,6 +52,24 @@ GZIP_MIN_SIZE = 1024
 # de génération et doit refléter l'état courant (supervision).
 NO_STORE_PATHS = frozenset({"/api/health"})
 
+# La SPA n'a ni script ni style en ligne dans sa source, mais les bibliothèques
+# de graphiques injectent des styles à l'exécution : `unsafe-inline` reste
+# nécessaire pour style-src. `blob:` et `data:` servent à l'export SVG/PNG.
+# La CSP ne s'applique qu'au HTML de la SPA : Swagger UI charge ses propres
+# ressources et serait cassé par `script-src 'self'`.
+SPA_CSP = (
+    "default-src 'self'; "
+    "script-src 'self'; "
+    "style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data: blob:; "
+    "font-src 'self'; "
+    "connect-src 'self'; "
+    "object-src 'none'; "
+    "base-uri 'none'; "
+    "form-action 'none'; "
+    "frame-ancestors 'none'"
+)
+
 
 def _weak_etag(body: bytes) -> str:
     """Étiquette faible : le même JSON peut être servi compressé ou non."""
@@ -235,10 +253,14 @@ def _mount_frontend(app: FastAPI, settings: Settings) -> None:
         # on vérifie le confinement avant de mettre un fichier en réponse.
         candidate = (root / full_path).resolve()
         if full_path and root in candidate.parents and candidate.is_file():
-            return FileResponse(candidate)
-        return FileResponse(index)
+            return _spa_file(candidate)
+        return _spa_file(index)
 
     log.info("frontend servi depuis %s", static_dir)
+
+
+def _spa_file(path: Path) -> FileResponse:
+    return FileResponse(path, headers={"Content-Security-Policy": SPA_CSP})
 
 
 app = create_app()

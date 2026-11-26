@@ -1,10 +1,20 @@
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
+type CspWindow = Window & { __cspViolations?: string[] };
+
 /** Les parcours critiques doivent se dérouler sans erreur JavaScript ni
  * requête d'API en échec : c'est le complément navigateur des tests API. */
 function watchErrors(page: Page): string[] {
   const errors: string[] = [];
+  page.addInitScript(() => {
+    (window as CspWindow).__cspViolations = [];
+    document.addEventListener("securitypolicyviolation", (event) => {
+      (window as CspWindow).__cspViolations?.push(
+        `${event.violatedDirective}: ${event.blockedURI}`,
+      );
+    });
+  });
   page.on("pageerror", (error) => errors.push(`pageerror: ${error.message}`));
   page.on("console", (message) => {
     if (message.type() === "error") errors.push(`console: ${message.text()}`);
@@ -50,6 +60,18 @@ test("la liste des préfixes ouvre la fiche d'un préfixe", async ({ page }) => 
   await expect(page).toHaveURL(/\/prefixes\//);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(prefix!);
   await expect(page.getByRole("heading", { name: "Autorisations RPKI" })).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test("la CSP est appliquée sans bloquer le frontend", async ({ page }) => {
+  const errors = watchErrors(page);
+  const response = await page.goto("/");
+  expect(response?.headers()["content-security-policy"]).toContain("default-src 'self'");
+  await expect(page.getByRole("heading", { level: 1, name: "Vue d'ensemble" })).toBeVisible();
+  const cspViolations = await page.evaluate(
+    () => (window as CspWindow).__cspViolations ?? [],
+  );
+  expect(cspViolations).toEqual([]);
   expect(errors).toEqual([]);
 });
 
