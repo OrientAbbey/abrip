@@ -13,6 +13,7 @@ from __future__ import annotations
 import functools
 import hashlib
 import hmac
+import threading
 import time
 from collections.abc import Callable
 from typing import Any
@@ -88,6 +89,11 @@ class DataAccess:
             "raw": settings.raw_dir,
         }
         self._cache: dict[str, tuple[float, Any]] = {}
+        # Une connexion DuckDB par thread : les endpoints synchrones tournent
+        # dans le pool de threads de FastAPI et une connexion DuckDB ne doit pas
+        # être partagée entre threads. La réutiliser évite de reconstruire le
+        # catalogue à chaque requête, sans introduire de verrou global.
+        self._local = threading.local()
 
     # --- résolution des chemins -----------------------------------------
     def glob_for(self, table: str) -> str:
@@ -110,14 +116,17 @@ class DataAccess:
         return self.glob_for(table)
 
     # --- exécution --------------------------------------------------------
+    def _connection(self) -> duckdb.DuckDBPyConnection:
+        con = getattr(self._local, "con", None)
+        if con is None:
+            con = duckdb.connect(database=":memory:")
+            self._local.con = con
+        return con
+
     def query(self, sql: str, params: list[Any] | None = None) -> list[dict[str, Any]]:
-        con = duckdb.connect(database=":memory:")
-        try:
-            cursor = con.execute(sql, params or [])
-            columns = [d[0] for d in cursor.description]
-            return [dict(zip(columns, row, strict=True)) for row in cursor.fetchall()]
-        finally:
-            con.close()
+        cursor = self._connection().execute(sql, params or [])
+        columns = [d[0] for d in cursor.description]
+        return [dict(zip(columns, row, strict=True)) for row in cursor.fetchall()]
 
     def scalar(self, sql: str, params: list[Any] | None = None) -> Any:
         rows = self.query(sql, params)
