@@ -1,6 +1,6 @@
 # Améliorations proposées pour ABRIP
 
-Ce document conserve l’ensemble des pistes d’amélioration identifiées dans la revue du projet. Les lots 1 à 14 (correctifs, garde-fous, schémas typés, durcissement HTTP, optimisation du transport, accessibilité/CSP, mesure de concurrence, rétention, observabilité, montée en workers, finitions de sécurité, alerting, qualité des données et précalcul) sont terminés et consignés dans `docs/suivi-modifications.md` ; seules deux pistes produit de la section 3 restent à planifier.
+Ce document conserve l’ensemble des pistes d’amélioration identifiées dans la revue du projet. Les lots 1 à 15 (correctifs, garde-fous, schémas typés, durcissement HTTP, optimisation du transport, accessibilité/CSP, mesure de concurrence, rétention, observabilité, montée en workers, finitions de sécurité, alerting, qualité des données, précalcul et qualification L5) sont terminés et consignés dans `docs/suivi-modifications.md` ; seule la détection sub-horaire reste à planifier.
 
 ## 1. Correctifs fonctionnels et de fiabilité — terminé
 
@@ -22,7 +22,7 @@ Ce document conserve l’ensemble des pistes d’amélioration identifiées dans
 
 ## 3. Améliorations produit — à planifier
 
-- **Boucle de qualification humaine L5** (`docs/limites-et-remediations.md`, CLI et interface) : enregistrer les retours sur les événements, fournir `abrip detect label` et `abrip detect precision`, versionner une allowlist et afficher la précision par détecteur. Le rappel mesuré sur les anomalies de démonstration ne suffit pas à mesurer les faux positifs réels.
+- **Boucle de qualification humaine L5 — fait (outillage)** : `abrip detect label`, `abrip detect precision`, `abrip detect allowlist` et la table `event_feedback` rendent la précision mesurable ; le jugement reste humain. Voir `docs/limites-et-remediations.md`.
 - **Schémas de réponse typés partout — lot 3 terminé** : les 19 endpoints qui renvoyaient des `dict` ad hoc (statistiques de préfixe, séries DuckDB, fiches, tableaux, historiques, propagation) ont désormais un `response_model` Pydantic explicite. La sérialisation UTC est unifiée via `ApiModel` et les clés conditionnelles du contrat sont préservées. Détail des sous-lots dans `docs/suivi-modifications.md`.
 - **Détection sub-horaire** : compléter les détecteurs raisonnant actuellement par jour avec des fenêtres glissantes et des signatures adaptées aux incidents courts.
 - **Alerting opérationnel — fait** : webhook compatible Slack pour les incidents au seuil configuré (`critical` par défaut), déduplication par `incident_id` dans le catalogue, commandes `detect run --notify` et `detect alert`. Configuration et échecs non bloquants documentés dans `docs/deploiement.md`.

@@ -332,6 +332,49 @@ def detect_list() -> None:
     console.print(table)
 
 
+@detect_app.command("label")
+def detect_label(
+    event_id: str,
+    verdict: str = typer.Option(..., help="legitimate | misconfiguration | malicious | unknown"),
+    note: str = typer.Option("", help="Note libre"),
+    author: str | None = typer.Option(None, help="Auteur du verdict"),
+) -> None:
+    """Qualifie un événement pour rendre la précision mesurable (L5)."""
+    import getpass
+
+    from abrip.qualification import VERDICTS
+
+    if verdict not in VERDICTS:
+        raise typer.BadParameter(f"verdict attendu : {', '.join(VERDICTS)}")
+    _settings, catalog = _bootstrap_runtime()
+    who = author or getpass.getuser()
+    catalog.record_feedback(event_id=event_id, verdict=verdict, author=who, note=note or None)
+    console.print(json.dumps({"event_id": event_id, "verdict": verdict, "author": who}, indent=2))
+
+
+@detect_app.command("precision")
+def detect_precision() -> None:
+    """Précision par détecteur, calculée sur les événements qualifiés."""
+    from abrip.api.deps import DataAccess
+    from abrip.qualification import precision_by_detector
+
+    settings, catalog = _bootstrap_runtime()
+    data = DataAccess(settings)
+    events: list[dict] = []
+    if data.exists("events"):
+        events = data.query(f"SELECT event_id, detector FROM {data.table('events')}")
+    console.print(json.dumps(precision_by_detector(events, catalog.all_feedback()), indent=2))
+
+
+@detect_app.command("allowlist")
+def detect_allowlist() -> None:
+    """Affiche les exemptions versionnées (configs/allowlist.yaml)."""
+    from abrip.qualification import load_allowlist
+
+    entries = [entry.model_dump() for entry in load_allowlist().entries]
+    console.print(json.dumps(entries, indent=2))
+
+
 @detect_app.command("watch")
 def detect_watch(
     minutes: int = typer.Option(5, help="Durée d'une fenêtre de capture, en minutes"),

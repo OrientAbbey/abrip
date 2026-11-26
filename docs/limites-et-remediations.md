@@ -1,6 +1,6 @@
 # Limites et remédiations
 
-Les limites de la plateforme viennent de la nature des données BGP, pas de défauts d'implémentation. Ce document les nomme une par une. Pour L1, L2, L3, L4, L6 et L7, la remédiation décrite est **implémentée et vérifiée** dans ce dépôt — le code, les tests et les commandes qui en font foi sont cités à chaque section. L5 reste à l'état de proposition : elle demande une boucle de qualification humaine (voir la section correspondante) qui n'a pas de sens à automatiser seule.
+Les limites de la plateforme viennent de la nature des données BGP, pas de défauts d'implémentation. Ce document les nomme une par une. Pour L1, L2, L3, L4, L6 et L7, la remédiation décrite est **implémentée et vérifiée** dans ce dépôt — le code, les tests et les commandes qui en font foi sont cités à chaque section. L5 est désormais outillée (verdicts stockés, précision calculable et exemptions versionnées) — la qualification elle-même demande toujours un opérateur humain.
 
 ---
 
@@ -73,7 +73,7 @@ Chaque appel réseau échoue en douceur (`inconclusive`, jamais d'exception) : u
 
 ## L5 — Une anomalie n'est pas une attaque
 
-**Non implémentée à ce stade** — hors du périmètre demandé pour cette passe. La proposition reste documentée ci-dessous.
+**Boucle outillée.** Les verdicts et la précision sont implémentés ; le jugement reste humain.
 
 **Le problème.** La plateforme détecte des écarts de routage. Distinguer l'erreur de configuration du détournement délibéré demande un contexte que les données publiques n'apportent pas. Sans qualification, on ne peut pas non plus mesurer la précision : on connaît le rappel sur la vérité terrain plantée, pas le taux de faux positifs sur données réelles.
 
@@ -81,8 +81,8 @@ Chaque appel réseau échoue en douceur (`inconclusive`, jamais d'exception) : u
 
 1. Une table `event_feedback` : `event_id`, `verdict` (`legitimate` / `misconfiguration` / `malicious` / `unknown`), auteur, horodatage, note libre.
 2. Une commande `abrip detect label <event_id> --verdict misconfiguration --note "..."` — la ligne de commande plutôt qu'une écriture depuis l'API, ce qui préserve la règle « l'API ne fait que lire ».
-3. Une commande `abrip detect precision` qui calcule, par détecteur, la part d'événements qualifiés légitimes. C'est ce chiffre qui doit piloter les seuils de `configs/detection.yaml`, pas une intuition.
-4. Une liste d'exemptions versionnée, `configs/allowlist.yaml`. La donnée AS2Org (désormais intégrée, voir L6) permet d'en pré-remplir une bonne partie automatiquement.
+3. Une commande `abrip detect precision` qui calcule, par détecteur, la part d'événements qualifiés légitimes (`false_positive_rate`) et son complément (`precision`). C'est ce chiffre qui doit piloter les seuils de `configs/detection.yaml`, pas une intuition.
+4. Une liste d'exemptions versionnée, `configs/allowlist.yaml`, affichable avec `abrip detect allowlist` et appliquée aux alertes. La donnée AS2Org (désormais intégrée, voir L6) permet d'en pré-remplir une bonne partie automatiquement.
 
 **Ce que ça ne règle pas.** La qualification demande un opérateur compétent et du temps. Sans utilisateur pour qualifier, la boucle reste vide — c'est une limite organisationnelle, pas technique.
 

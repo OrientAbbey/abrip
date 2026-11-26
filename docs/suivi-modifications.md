@@ -277,6 +277,15 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 - [x] Test : le générateur de la vue d'ensemble est appelé une fois avec `days=7` quand l'option est active.
 - [x] Vérification : 4 tests dédiés et 360 tests API/contrat/analytics existants OK. Gain à 50 M de lignes non re-mesuré (section « Précalcul » de `docs/performances.md`).
 
+## Lot 15 — Qualification humaine L5 — **terminé**
+
+### 15.1 Boucle de retours — **fait**
+- [x] Table `event_feedback` du catalogue (`event_id`, verdict, auteur, note, horodatage) avec validation des quatre verdicts ; aucune écriture depuis l'API, qui reste en lecture seule.
+- [x] `abrip detect label <event_id> --verdict ... --author ... --note ...` et `abrip detect precision` : taux de faux positifs et précision par détecteur (`unknown` exclu du dénominateur).
+- [x] `configs/allowlist.yaml` versionné, chargé et validé par `qualification.py`, affichable avec `abrip detect allowlist` et appliqué aux alertes (correspondance par préfixe, ASN ou détecteur).
+- [x] Test : 7 cas (verdicts, précision, allowlist YAML, CLI, silence d'une alerte admissible). Documentation L5 et guide de déploiement mis à jour.
+- [x] La qualification reste une tâche humaine : sans opérateur, la boucle reste vide. Le mécanisme est prêt, le jugement ne s'automatise pas.
+
 ## Vérification finale du lot 1 + 2
 
 | Vérification | Résultat |
@@ -301,6 +310,7 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 | `tests/test_alerting.py` | 6 tests : sévérité, déduplication, échec HTTP, webhook absent, incidents récents, commande CLI |
 | `tests/test_qualite_donnees.py` | 3 tests : contrat de `/api/quality`, journal d'ingestion, installation vierge |
 | `tests/test_precalcul.py` | 4 tests : équivalence précalcul/calcul direct, fiche AS avant/après, commande CLI, préchauffage |
+| `tests/test_qualification.py` | 7 tests : verdicts persistés, précision, allowlist YAML, commandes CLI, alerte tue par exemption |
 | `npm run test:e2e` | 14 parcours Playwright OK (5 accessibilité, 7 smoke, 2 clavier ; dont 1 exécution en mode CI) |
 | `npm run typecheck` | OK (src, e2e et configurations) |
 | `npm run build` | OK |
@@ -341,6 +351,7 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 | 2026-11-26 | Lot 12 — alerting | `config.py`, `alerting.py`, `cli.py`, `storage/catalog.py`, `tests/test_alerting.py`, `docs/deploiement.md` | Webhook Slack, déduplication par incident, `--notify` et `detect alert` ; 6 tests sans réseau |
 | 2026-11-26 | Lot 13 — qualité des données | `api/schemas.py`, `api/routers/system.py`, `pages/Quality.tsx`, `App.tsx`, `Layout.tsx`, `tests/test_qualite_donnees.py` | `/api/quality` typé et page dédiée ; 3 tests API, 14 parcours navigateur |
 | 2026-11-26 | Lot 14 — précalcul | `analytics/precompute.py`, `api/{main,deps}.py`, `api/routers/{explore,system}.py`, `cli.py`, `tests/test_precalcul.py` | `asn_prefix_stats`, bascule automatique et `api.prewarm` ; 4 tests dédiés |
+| 2026-11-26 | Lot 15 — qualification L5 | `catalog.py`, `qualification.py`, `configs/allowlist.yaml`, `cli.py`, `alerting.py`, `tests/test_qualification.py` | Verdicts, précision par détecteur et exemptions appliquées aux alertes ; 7 tests dédiés |
 
 ## Bilan
 
@@ -358,4 +369,5 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 - **Lot 12 :** terminé : alertes webhook sur incidents critiques avec déduplication persistée, sans réseau dans les tests.
 - **Lot 13 :** terminé : tableau de qualité des données exposé dans l'API et dans l'interface, sans recalcul.
 - **Lot 14 :** terminé : précalcul des préfixes par AS avec bascule automatique et préchauffage optionnel de la vue d'ensemble.
-- **Points reportés :** boucle de qualification humaine L5 et détection sub-horaire ; toutes les autres pistes des sections 1, 2 et 4 sont traitées.
+- **Lot 15 :** terminé : boucle de qualification L5 outillée (verdicts, précision, allowlist) ; le jugement humain reste nécessaire.
+- **Point reporté :** détection sub-horaire. Toutes les autres pistes des sections 1, 2, 3 et 4 sont traitées.

@@ -353,8 +353,23 @@ dans la requête si elle est courte et sans caractère suspect). Le même
 identifiant est ajouté aux logs JSON sous `request_id`, ce qui permet de passer
 d'une alerte à la trace d'une requête.
 
-La page « Qualité des données » de l'interface expose la même information sous
-forme de tableaux : fraîcheur des sources d'ingestion, couverture par pays,
+### Qualification des événements (L5)
+
+Les verdicts humains sont conservés dans le catalogue, l'API restant en lecture
+seule :
+
+```bash
+abrip detect label <event_id> --verdict misconfiguration --author alice --note "..."
+abrip detect precision          # précision et taux de faux positifs par détecteur
+abrip detect allowlist          # exemptions versionnées
+```
+
+Les verdicts `legitimate` sont comptés comme faux positifs ; `unknown` est
+exclu du calcul. Les entrées de `configs/allowlist.yaml` (ASN, préfixe,
+détecteur facultatif) taient les alertes correspondantes.
+
+La page « Qualité des données » de l'interface expose les indicateurs de
+fraîcheur et de couverture sous forme de tableaux : sources d'ingestion, pays,
 référentiel RPKI et collecteurs silencieux. L'endpoint correspondant est
 `GET /api/quality`, protégé par la clé API comme le reste de l'API.
 
