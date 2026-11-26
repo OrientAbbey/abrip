@@ -9,6 +9,9 @@ liste `api.cors_origins` qui l'autorise.
 from __future__ import annotations
 
 import hashlib
+import re
+import time
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -21,9 +24,10 @@ from fastapi.staticfiles import StaticFiles
 
 from abrip import __version__
 from abrip.api.deps import api_key_matches, verify_api_key
+from abrip.api.metrics import observe, render
 from abrip.api.routers import asn_explorer, events, explore, metrics, propagation, system
 from abrip.config import Settings, get_settings
-from abrip.logging_conf import get_logger, setup_logging
+from abrip.logging_conf import current_request_id, get_logger, setup_logging
 
 log = get_logger(__name__)
 
@@ -47,6 +51,10 @@ def _error(status_code: int, code: str, message: str, details: dict[str, Any] | 
 # En dessous, compresser coûte plus qu'envoyer : les petites réponses JSON
 # (santé, une ligne) partent telles quelles.
 GZIP_MIN_SIZE = 1024
+
+# Un identifiant de requête fourni par le client est accepté s'il reste court et
+# composé de caractères sans risque ; sinon on en génère un.
+REQUEST_ID_PATTERN = re.compile(r"[A-Za-z0-9._:-]{1,64}")
 
 # Réponses volontairement jamais mises en cache : `/health` porte un horodatage
 # de génération et doit refléter l'état courant (supervision).
@@ -173,6 +181,38 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # l'encodage négocié).
     app.add_middleware(GZipMiddleware, minimum_size=GZIP_MIN_SIZE)
 
+    # Observabilité ajoutée après la compression : Starlette la place donc en
+    # tête de pile, elle voit le statut final (304 compris) et couvre aussi les
+    # erreurs. L'identifiant est propagé aux logs via un ContextVar.
+    @app.middleware("http")
+    async def observe_request(request: Request, call_next):
+        provided = request.headers.get("x-request-id")
+        request_id = (
+            provided if provided and REQUEST_ID_PATTERN.fullmatch(provided) else uuid.uuid4().hex
+        )
+        token = current_request_id.set(request_id)
+        request.state.request_id = request_id
+        started = time.perf_counter()
+        status = 500
+        try:
+            response = await call_next(request)
+            status = response.status_code
+            response.headers["X-Request-ID"] = request_id
+            return response
+        finally:
+            route = request.scope.get("route")
+            route_path = getattr(route, "path", None)
+            if route_path is None:
+                path = "unmatched"
+            elif request.url.path.startswith("/api") and not route_path.startswith("/api"):
+                # Les routeurs sont montés avec le préfixe `/api`, mais
+                # `route.path` reste le chemin relatif au routeur.
+                path = f"/api{route_path}"
+            else:
+                path = route_path
+            observe(request.method, path, status, time.perf_counter() - started)
+            current_request_id.reset(token)
+
     for router in (
         system.router,
         # propagation avant explore : `/prefixes/{prefix:path}` avale sinon
@@ -211,6 +251,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def unexpected_error(request: Request, exc: Exception):
         log.exception("erreur non gérée sur %s", request.url.path)
         return _error(500, "internal_error", "Erreur interne du service.")
+
+    # Exposition Prometheus : sous /api pour hériter de la clé API globale, hors
+    # schéma OpenAPI car c'est un format d'exploitation, pas un contrat public.
+    @app.get("/api/metrics", include_in_schema=False)
+    def prometheus_metrics() -> Response:
+        return Response(
+            content=render(settings),
+            media_type="text/plain; version=0.0.4; charset=utf-8",
+        )
 
     # 404 normalisé pour les routes API inconnues. Indispensable aussi quand le
     # frontend n'est pas compilé : sans catch-all, Starlette renvoie son format

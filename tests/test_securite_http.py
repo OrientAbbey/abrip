@@ -84,6 +84,10 @@ class TestCleApi:
     def test_bonne_cle_est_acceptee(self, protege):
         assert protege.get("/api/health", headers={"x-api-key": "cle-de-test"}).status_code == 200
 
+    def test_metriques_sont_aussi_protegees(self, protege):
+        assert protege.get("/api/metrics").status_code == 401
+        assert protege.get("/api/metrics", headers={"x-api-key": "cle-de-test"}).status_code == 200
+
     def test_documentation_est_aussi_protegee(self, protege):
         assert protege.get("/api/openapi.json").status_code == 401
         assert (

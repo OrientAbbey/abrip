@@ -325,6 +325,27 @@ ferait recalculer directement certaines pages, plus lentement. La compaction
 reste assurée par `abrip etl compact` (tri et fusion des fragments en un seul
 fichier par partition), à relancer après une curation d'anciennes dates.
 
+### Observabilité
+
+`GET /api/metrics` expose au format Prometheus (sous la clé API si elle est
+configurée) : compteurs et histogramme de latence par modèle de route, ainsi que
+le nombre d'octets et l'âge de la partition la plus récente pour chaque couche.
+Les libellés utilisent le **modèle** de route (`/api/asns/{asn}`), pas l'URL
+réelle, pour borner la cardinalité.
+
+```yaml
+scrape_configs:
+  - job_name: abrip
+    metrics_path: /api/metrics
+    static_configs:
+      - targets: ["127.0.0.1:8000"]
+```
+
+Chaque réponse porte un en-tête `X-Request-ID` (UUID généré, ou valeur reçue
+dans la requête si elle est courte et sans caractère suspect). Le même
+identifiant est ajouté aux logs JSON sous `request_id`, ce qui permet de passer
+d'une alerte à la trace d'une requête.
+
 ### Premier essai réel : un collecteur, un jour
 
 Le parcours sur données réelles n'a pas pu être exécuté de bout en bout par les auteurs : l'environnement de développement n'atteint ni RouteViews, ni RIPE, ni IODA, ni PeeringDB. Ce qui est vérifié, c'est le comportement **quand les sources sont injoignables** (tests `tests/test_hors_demo.py` et essai manuel) ; ce qui ne l'est pas, c'est le succès sur de vraies archives. Commencez petit, depuis un poste qui a accès à Internet :

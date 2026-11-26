@@ -9,6 +9,7 @@ from contextvars import ContextVar
 from typing import Any
 
 current_run_id: ContextVar[str | None] = ContextVar("current_run_id", default=None)
+current_request_id: ContextVar[str | None] = ContextVar("current_request_id", default=None)
 
 _RESERVED = set(logging.LogRecord("", 0, "", 0, "", None, None).__dict__) | {
     "message",
@@ -28,6 +29,9 @@ class JsonFormatter(logging.Formatter):
         run_id = current_run_id.get()
         if run_id:
             payload["run_id"] = run_id
+        request_id = current_request_id.get()
+        if request_id:
+            payload["request_id"] = request_id
         for key, value in record.__dict__.items():
             if key not in _RESERVED:
                 payload[key] = value
