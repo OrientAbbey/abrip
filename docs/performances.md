@@ -141,6 +141,36 @@ pourtant dans de petites tables, une par jour (`analytics/daily.py`) :
 | Rejeu d'un préfixe très bavard | 2,5 s | agréger les tranches côté DuckDB |
 | Calcul des tables et des métriques | non mesuré sur de vrais MRT | à mesurer sur ton poste |
 
+## Concurrence
+
+Le script `scripts/bench/run_charge.py` mesure un mélange de routes avec un
+nombre configurable d'utilisateurs simultanés. Le service doit tourner :
+
+```bash
+uv run --locked abrip api serve --port 8010
+uv run --locked python scripts/bench/run_charge.py --url http://127.0.0.1:8010 \
+    --users 10 --duration 30 --json /tmp/charge.json
+```
+
+Il découvre un préfixe et un ASN au démarrage, préchauffe les index, puis
+envoie les requêtes sans cache client (httpx ne réutilise pas les ETag). Le JSON
+en sortie permet de comparer deux exécutions. Sur le jeu de démonstration, en
+local, une seule instance uvicorn :
+
+| Utilisateurs | Requêtes / 10 s | p50 global | p95 global |
+|---|---|---|---|
+| 1 | 22 | 0,38 s | 1,25 s |
+| 5 | 43 | 1,07 s | 4,12 s |
+| 10 | 43 | 1,22 s | 9,39 s |
+
+Lecture : le débit plafonne vers 4,3 requêtes/s et la latence p95 explose avec
+la concurrence. Le service est mono-processus et les endpoints analytiques
+utilisent DuckDB sur un seul cœur : la voie de montée est de lancer plusieurs
+workers (la connexion DuckDB étant par thread, chaque worker reste sûr) et de
+précalculer les endpoints qui reviennent le plus. Ces chiffres ne sont pas
+transposables à une machine ou un jeu de données différents : c'est la
+procédure qui est reproductible, pas la valeur absolue.
+
 ## Limites de ces mesures
 
 - **Sept jours de données seulement.** Les jeux synthétiques couvrent une semaine. Une
@@ -151,7 +181,7 @@ pourtant dans de petites tables, une par jour (`analytics/daily.py`) :
 - Données **synthétiques** : chemins courts et uniformes, un préfixe = une origine,
   pas de rafales. Des données réelles seront plus irrégulières, et les chemins plus
   longs.
-- **Un seul utilisateur** : aucune mesure de concurrence.
+- **Mesures de concurrence** : voir la section « Concurrence » ci-dessus ; le test de charge n'est pas joué en CI (il dépend d'une machine et d'une durée choisies).
 - Pas de mesure sur **disque lent** ni sur ton portable : à refaire sur place avec
   `scripts/bench/`.
 - Les 50 M de lignes pèsent 673 Mo en Parquet ; la couche brute (fichiers MRT) et le

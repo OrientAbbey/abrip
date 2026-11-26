@@ -195,6 +195,14 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 - [x] Test Python : CSP présente sur le HTML de la SPA, absente de l'API ; test navigateur : aucun événement `securitypolicyviolation` ni erreur console.
 - [x] Vérification : 21 tests Python ciblés, 9 parcours Playwright (4 accessibilité + 5 smoke), `npm run typecheck` et `npm run build` OK.
 
+## Lot 7 — Mesure de concurrence — **terminé**
+
+### 7.1 Test de charge reproductible — **fait**
+- [x] `scripts/bench/run_charge.py` : utilisateurs simultanés configurable (`--users`), durée (`--duration`), pause éventuelle (`--think`), sortie JSON (`--json`). Découvre un préfixe et un ASN présents, préchauffe les index, puis envoie un mélange de neuf routes sans cache client.
+- [x] Aucune dépendance ajoutée : `httpx` et `asyncio` suffisent, le script reste lisible et jouable avec l'environnement du projet.
+- [x] Rapport : nombre de requêtes, débit, erreurs réseau et réponses non-200, p50/p95/p99 par endpoint et global.
+- [x] Mesure locale de référence consignée dans `docs/performances.md` : 2,2 → 4,3 req/s de 1 à 5 utilisateurs, puis plateau à 4,3 req/s à 10 utilisateurs avec un p95 passant de 1,25 s à 9,39 s. Mono-processus et DuckDB monocœur expliquent la limite ; non joué en CI.
+
 ## Vérification finale du lot 1 + 2
 
 | Vérification | Résultat |
@@ -210,6 +218,7 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 | `tests/test_securite_http.py`, `test_recherche_litterale.py` | 40 tests ciblés au total avec API/noms AS, dont en-têtes, clé API et jokers SQL ; 2 tests CSP ajoutés au lot 6 |
 | `tests/test_http_cache.py`, `test_acces_donnees.py` | 11 tests : gzip, ETag/304, `no-store` de la santé, réutilisation des connexions DuckDB |
 | `frontend/e2e/accessibilite.spec.ts` | 4 pages auditées par axe (WCAG 2.0/2.1 A et AA), zéro violation |
+| `scripts/bench/run_charge.py` | Générateur async sans dépendance : `--users`, `--duration`, `--think`, `--json` ; rapport p50/p95/p99 par endpoint |
 | `npm run test:e2e` | 9 parcours Playwright OK (4 accessibilité, 5 smoke ; dont 1 exécution en mode CI) |
 | `npm run typecheck` | OK (src, e2e et configurations) |
 | `npm run build` | OK |
@@ -242,6 +251,7 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 | 2026-11-26 | Lot 4 — durcissement HTTP | `api/{main,deps,search}.py`, `api/routers/explore.py`, `tests/test_securite_http.py`, `tests/test_recherche_litterale.py` | En-têtes, clé en temps constant, LIKE échappé ; 40 tests ciblés et 4 parcours navigateur OK |
 | 2026-11-26 | Lot 5 — optimisation HTTP | `api/{main,deps}.py`, `tests/{test_http_cache,test_acces_donnees}.py`, `docs/performances.md` | gzip, ETag/304, santé `no-store`, connexions DuckDB par thread ; 11 tests dédiés et 49 tests ciblés OK |
 | 2026-11-26 | Lot 6 — accessibilité et CSP | `api/main.py`, `src/styles.css`, `e2e/{accessibilite,smoke}.spec.ts`, `tests/test_securite_http.py` | 55 problèmes de contraste corrigés, axe WCAG sur 4 pages, CSP sur la SPA ; 21 tests Python et 9 parcours navigateur OK |
+| 2026-11-26 | Lot 7 — mesure de concurrence | `scripts/bench/run_charge.py`, `docs/performances.md` | 2,2 à 4,3 req/s selon la concurrence ; p95 de 1,25 s à 9,39 s sur le jeu de démonstration |
 
 ## Bilan
 
@@ -251,4 +261,5 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 - **Lot 4 :** terminé pour le durcissement HTTP (recherche littérale, clé en temps constant, en-têtes) ; la limitation de débit et la CSP restent à étudier.
 - **Lot 5 :** terminé pour le transport HTTP (gzip, ETag/304, connexions DuckDB par thread) ; les gains n'ont pas été re-mesurés sur les jeux à 50 M de lignes.
 - **Lot 6 :** terminé : contrôles WCAG automatisés dans Playwright, contrastes corrigés et CSP sur le HTML de la SPA ; la limitation de débit reste à étudier.
-- **Points reportés :** rétention et compaction, test de charge, limitation de débit, ainsi que les autres pistes produit de la section 3.
+- **Lot 7 :** terminé : test de charge asyncio reproductible et première mesure de concurrence, consignée dans `docs/performances.md`.
+- **Points reportés :** rétention et compaction, limitation de débit, tests d'interactions clavier, montée en workers pour la concurrence, ainsi que les autres pistes produit de la section 3.
