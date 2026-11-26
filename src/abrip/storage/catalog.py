@@ -12,7 +12,7 @@ import time
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -59,6 +59,11 @@ CREATE TABLE IF NOT EXISTS curated_partitions (
     bytes         BIGINT,
     run_id        VARCHAR,
     written_at    TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS alert_log (
+    incident_id VARCHAR PRIMARY KEY,
+    sent_at     TIMESTAMP NOT NULL
 );
 """
 
@@ -203,6 +208,42 @@ class Catalog:
                        run_id = excluded.run_id, written_at = excluded.written_at""",
                 [f"{table_name}:{path}", table_name, path, rows, size_bytes, run_id, _utcnow()],
             )
+
+    # --- alertes ------------------------------------------------------------
+    def already_alerted(self, incident_ids: list[str]) -> set[str]:
+        """Identifiants déjà notifiés, pour ne pas réenvoyer un incident."""
+        if not incident_ids:
+            return set()
+        sent: set[str] = set()
+        with self.connect() as con:
+            for start in range(0, len(incident_ids), 100):
+                chunk = incident_ids[start : start + 100]
+                rows = con.execute(
+                    "SELECT incident_id FROM alert_log WHERE incident_id IN "
+                    f"({','.join('?' * len(chunk))})",
+                    chunk,
+                ).fetchall()
+                sent.update(row[0] for row in rows)
+        return sent
+
+    def record_alert(self, incident_id: str) -> None:
+        with self.connect() as con:
+            con.execute(
+                "INSERT OR REPLACE INTO alert_log (incident_id, sent_at) VALUES (?, ?)",
+                [incident_id, _utcnow()],
+            )
+
+    def prune_alerts(self, days: int) -> int:
+        """Oublie les notifications plus anciennes que la fenêtre de déduplication."""
+        cutoff = _utcnow() - timedelta(days=days)
+        with self.connect() as con:
+            removed = int(
+                con.execute(
+                    "SELECT count(*) FROM alert_log WHERE sent_at < ?", [cutoff]
+                ).fetchone()[0]  # type: ignore[index]
+            )
+            con.execute("DELETE FROM alert_log WHERE sent_at < ?", [cutoff])
+        return removed
 
     def coverage(self) -> dict[str, Any]:
         """Fraîcheur des données, exposée par ``/api/health``."""

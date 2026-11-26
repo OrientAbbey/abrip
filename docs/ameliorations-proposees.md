@@ -1,6 +1,6 @@
 # Améliorations proposées pour ABRIP
 
-Ce document conserve l’ensemble des pistes d’amélioration identifiées dans la revue du projet. Les lots 1 à 11 (correctifs, garde-fous, schémas typés, durcissement HTTP, optimisation du transport, accessibilité/CSP, mesure de concurrence, rétention, observabilité, montée en workers et finitions de sécurité) sont terminés et consignés dans `docs/suivi-modifications.md` ; le reste des points 3 et 4 est à planifier.
+Ce document conserve l’ensemble des pistes d’amélioration identifiées dans la revue du projet. Les lots 1 à 12 (correctifs, garde-fous, schémas typés, durcissement HTTP, optimisation du transport, accessibilité/CSP, mesure de concurrence, rétention, observabilité, montée en workers, finitions de sécurité et alerting) sont terminés et consignés dans `docs/suivi-modifications.md` ; le reste des points 3 et 4 est à planifier.
 
 ## 1. Correctifs fonctionnels et de fiabilité — terminé
 
@@ -25,7 +25,7 @@ Ce document conserve l’ensemble des pistes d’amélioration identifiées dans
 - **Boucle de qualification humaine L5** (`docs/limites-et-remediations.md`, CLI et interface) : enregistrer les retours sur les événements, fournir `abrip detect label` et `abrip detect precision`, versionner une allowlist et afficher la précision par détecteur. Le rappel mesuré sur les anomalies de démonstration ne suffit pas à mesurer les faux positifs réels.
 - **Schémas de réponse typés partout — lot 3 terminé** : les 19 endpoints qui renvoyaient des `dict` ad hoc (statistiques de préfixe, séries DuckDB, fiches, tableaux, historiques, propagation) ont désormais un `response_model` Pydantic explicite. La sérialisation UTC est unifiée via `ApiModel` et les clés conditionnelles du contrat sont préservées. Détail des sous-lots dans `docs/suivi-modifications.md`.
 - **Détection sub-horaire** : compléter les détecteurs raisonnant actuellement par jour avec des fenêtres glissantes et des signatures adaptées aux incidents courts.
-- **Alerting opérationnel** (`src/abrip/cli.py`) : envoyer une notification (webhook, Slack ou e-mail) pour les incidents critiques, avec déduplication par `incident_id`.
+- **Alerting opérationnel — fait** : webhook compatible Slack pour les incidents au seuil configuré (`critical` par défaut), déduplication par `incident_id` dans le catalogue, commandes `detect run --notify` et `detect alert`. Configuration et échecs non bloquants documentés dans `docs/deploiement.md`.
 - **Tableau de qualité des données** : exposer la fraîcheur par source, la couverture par pays, le statut ROA et les collecteurs silencieux à partir des métriques et métadonnées existantes.
 - **Métriques d’exploitation — fait** : `/api/metrics` expose compteurs HTTP, histogramme de latence par modèle de route et jauges de taille/fraîcheur des couches ; chaque réponse porte un `X-Request-ID` également présent dans les logs JSON. Configuration de scrape dans `docs/deploiement.md`.
 

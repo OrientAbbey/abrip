@@ -346,6 +346,31 @@ dans la requête si elle est courte et sans caractère suspect). Le même
 identifiant est ajouté aux logs JSON sous `request_id`, ce qui permet de passer
 d'une alerte à la trace d'une requête.
 
+### Alertes sur incidents
+
+Aucune alerte ne part sans configuration explicite. Un webhook au format Slack
+(en fait un webhook HTTP générique acceptant `{"text": "..."}`) suffit :
+
+```bash
+export ABRIP_ALERTS__WEBHOOK_URL="https://hooks.slack.com/services/..."
+export ABRIP_ALERTS__MIN_SEVERITY="critical"   # info | watch | critical
+export ABRIP_ALERTS__DEDUPE_DAYS=7
+```
+
+Deux façons d'émettre :
+
+```bash
+abrip detect run --from 2026-08-24 --to 2026-08-30 --notify   # après la détection
+abrip detect alert --days 2                                  # depuis les incidents persistés
+```
+
+La déduplication est conservée dans le catalogue (`alert_log`) par
+`incident_id` : un même incident n'est notifié qu'une fois par fenêtre. Un
+webhook injoignable est journalisé sans interrompre la détection. Le message
+comporte le préfixe, le résumé, les détecteurs, le score et la date de début.
+L'hébergement envoie depuis le processus qui exécute la commande, indépendamment
+du nombre de workers du serveur.
+
 ### Limitation de débit
 
 `api.rate_limit_per_minute` (ou `ABRIP_API__RATE_LIMIT_PER_MINUTE`) borne le
