@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from abrip import __version__
-from abrip.api.deps import verify_api_key
+from abrip.api.deps import api_key_matches, verify_api_key
 from abrip.api.routers import asn_explorer, events, explore, metrics, propagation, system
 from abrip.config import Settings, get_settings
 from abrip.logging_conf import get_logger, setup_logging
@@ -82,10 +82,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if (
             expected
             and request.url.path in {"/api/docs", "/api/openapi.json", "/api/redoc"}
-            and request.headers.get("x-api-key") != expected
+            and not api_key_matches(expected, request.headers.get("x-api-key"))
         ):
             return _error(401, "unauthorized", "Clé API absente ou invalide.")
         return await call_next(request)
+
+    # En-têtes de défense en profondeur : l'API est en lecture seule et le
+    # frontend est servi sur la même origine, aucun besoin de frames tierces.
+    @app.middleware("http")
+    async def security_headers(request: Request, call_next):
+        response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        response.headers.setdefault(
+            "Permissions-Policy", "geolocation=(), microphone=(), camera=()"
+        )
+        return response
 
     for router in (
         system.router,

@@ -11,6 +11,8 @@ n'exécute du SQL fourni par l'appelant.
 from __future__ import annotations
 
 import functools
+import hashlib
+import hmac
 import time
 from collections.abc import Callable
 from typing import Any
@@ -148,10 +150,24 @@ def get_data_access() -> DataAccess:
     return DataAccess(get_settings())
 
 
+def api_key_matches(expected: str | None, provided: str | None) -> bool:
+    """Compare deux clés sans fuir leur contenu par le temps de comparaison.
+
+    On compare des empreintes de même longueur plutôt que les chaînes : la clé
+    configurée n'influe ainsi ni sur la durée ni sur la longueur observée.
+    """
+    if not expected:
+        return True  # authentification désactivée (usage local)
+
+    def digest(value: str | None) -> bytes:
+        return hashlib.sha256((value or "").encode("utf-8")).digest()
+
+    return hmac.compare_digest(digest(provided), digest(expected))
+
+
 def verify_api_key(x_api_key: str | None = Header(default=None)) -> None:
     """Clé API optionnelle. Désactivée par défaut, pour ne pas gêner l'usage local."""
-    expected = get_settings().api.api_key
-    if expected and x_api_key != expected:
+    if not api_key_matches(get_settings().api.api_key, x_api_key):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={"code": "unauthorized", "message": "Clé API absente ou invalide."},

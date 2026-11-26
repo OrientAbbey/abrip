@@ -27,6 +27,7 @@ from abrip.api.schemas import (
     TopPath,
     VisibilitySnapshot,
 )
+from abrip.api.search import escape_like
 
 router = APIRouter(tags=["exploration"])
 
@@ -76,8 +77,8 @@ def list_asns(
     if african_only and ref:
         conditions.append("r.is_african")
     if q:
-        conditions.append("CAST(e.origin_asn AS VARCHAR) LIKE ?")
-        params.append(f"%{q}%")
+        conditions.append(r"CAST(e.origin_asn AS VARCHAR) LIKE ? ESCAPE '\'")
+        params.append(f"%{escape_like(q)}%")
 
     ref_join = f"LEFT JOIN {ref} r ON r.asn = e.origin_asn" if ref else ""
     ref_cols = (
@@ -223,8 +224,8 @@ def list_prefixes(
         # de tout bgp_elements (4,8 s à 50 M de lignes, voir docs/performances.md).
         conditions = ["TRUE"]
         if q:
-            conditions.append("prefix LIKE ?")
-            params.append(f"{q}%")
+            conditions.append(r"prefix LIKE ? ESCAPE '\'")
+            params.append(f"{escape_like(q)}%")
         if origin_asn is not None:
             conditions.append("origin_asn = ?")
             params.append(origin_asn)
@@ -240,8 +241,8 @@ def list_prefixes(
         elements = data.table("bgp_elements")
         conditions = ["elem_type <> 'R'"]
         if q:
-            conditions.append("prefix LIKE ?")
-            params.append(f"{q}%")
+            conditions.append(r"prefix LIKE ? ESCAPE '\'")
+            params.append(f"{escape_like(q)}%")
         if origin_asn is not None:
             conditions.append("origin_asn = ?")
             params.append(origin_asn)
@@ -388,8 +389,8 @@ def search(
     if term.isdigit() and data.exists("ref_asn"):
         for row in data.query(
             f"""SELECT asn, country_iso2, is_african FROM {data.table("ref_asn")}
-                WHERE CAST(asn AS VARCHAR) LIKE ? LIMIT 10""",
-            [f"{term}%"],
+                WHERE CAST(asn AS VARCHAR) LIKE ? ESCAPE '\' LIMIT 10""",
+            [f"{escape_like(term)}%"],
         ):
             hits.append(
                 SearchHit(
@@ -403,8 +404,8 @@ def search(
     if any(char in term for char in "./:") or term[:1].isdigit():
         for row in data.query(
             f"""SELECT DISTINCT prefix FROM {data.table("bgp_elements")}
-                WHERE prefix LIKE ? LIMIT 10""",
-            [f"{term}%"],
+                WHERE prefix LIKE ? ESCAPE '\' LIMIT 10""",
+            [f"{escape_like(term)}%"],
         ):
             hits.append(SearchHit(kind="prefix", value=row["prefix"], label=row["prefix"]))
 
