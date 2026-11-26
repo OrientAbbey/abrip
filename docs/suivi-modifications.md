@@ -149,6 +149,23 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 - [x] `UpstreamPoint.values` reste un `dict[str, int]` à clés dynamiques `as{n}` ; les `ts` restent des chaînes ISO avec `+00:00` (format attendu par les tests et le frontend).
 - [x] Vérification : 46 tests ciblés (dont les tests de bornes du rejeu), 16 tests de contrat et 4 parcours navigateur OK. **Les 19 endpoints ad hoc sont désormais typés.**
 
+## Lot 4 — Durcissement HTTP — **terminé**
+
+### 4.1 Recherche littérale — **fait**
+- [x] `escape_like` (`src/abrip/api/search.py`) échappe `\`, `%` et `_` ; toutes les requêtes `LIKE` de `explore.py` utilisent désormais `ESCAPE '\'`.
+- [x] Quatre filtres couverts : `q` de `/asns` et `/prefixes`, et les deux branches de `/search` (ASN et préfixe).
+- [x] Tests : un `%` ou un `_` saisi ne renvoie aucun résultat, la recherche littérale continue de fonctionner.
+
+### 4.2 Comparaison de clé en temps constant — **fait**
+- [x] `api_key_matches` (`api/deps.py`) hache les deux chaînes en SHA-256 puis utilise `hmac.compare_digest` : ni le contenu ni la longueur de la clé configurée ne fuient par le temps de comparaison.
+- [x] Utilisé à la fois par la dépendance globale `verify_api_key` et par le middleware qui protège `/api/docs` et `/api/openapi.json`.
+- [x] Tests : clé absente, mauvaise clé, bonne clé, documentation protégée, authentification désactivée par défaut.
+
+### 4.3 En-têtes de sécurité — **fait**
+- [x] Middleware HTTP sur toutes les réponses (API et SPA) : `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Permissions-Policy` restreinte.
+- [x] Pas de CSP ajoutée dans ce lot : le frontend embarque des styles en ligne et la règle doit être vérifiée parcours par parcours avant déploiement. À reprendre avec les tests d’accessibilité.
+- [x] Vérification : 40 tests ciblés et 4 parcours navigateur OK.
+
 ## Vérification finale du lot 1 + 2
 
 | Vérification | Résultat |
@@ -161,6 +178,7 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 | Couverture Python | 81,03 % (seuil CI 80 %) |
 | `npm test` | 11 tests OK |
 | `tests/test_api_contrat_schemas.py` | 16 tests de contrat (OpenAPI, facets, pays, noms AS, incidents UTC, relations, préfixes, voisins, historiques, périodes, fiches AS/préfixe/timeline, propagation et amonts) |
+| `tests/test_securite_http.py`, `test_recherche_litterale.py` | 40 tests ciblés au total avec API/noms AS, dont en-têtes, clé API et jokers SQL |
 | `npm run test:e2e` | 4 parcours Playwright OK (dont 1 exécution en mode CI) |
 | `npm run typecheck` | OK (src, e2e et configurations) |
 | `npm run build` | OK |
@@ -190,10 +208,12 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 | 2026-11-25 | Lot 3, sous-lot 3.3 | `api/schemas.py`, `api/routers/asn_explorer.py`, `tests/test_api_contrat_schemas.py` | 8 endpoints typés ; 326 tests OK dont 316 d’équivalence, 4 parcours navigateur OK |
 | 2026-11-25 | Lot 3, sous-lot 3.4 | `api/schemas.py`, `api/routers/{explore,events}.py`, `tests/test_api_contrat_schemas.py` | 3 fiches typées ; datetimes en `Z` ; 13 tests de contrat et 4 parcours navigateur OK |
 | 2026-11-25 | Lot 3, sous-lot 3.5 | `api/schemas.py`, `api/routers/propagation.py`, `tests/test_api_contrat_schemas.py` | 3 endpoints typés ; `path_ids` conditionnel préservé ; 46 tests ciblés et 4 parcours navigateur OK |
+| 2026-11-26 | Lot 4 — durcissement HTTP | `api/{main,deps,search}.py`, `api/routers/explore.py`, `tests/test_securite_http.py`, `tests/test_recherche_litterale.py` | En-têtes, clé en temps constant, LIKE échappé ; 40 tests ciblés et 4 parcours navigateur OK |
 
 ## Bilan
 
 - **Lot 1 :** terminé et vérifié ; sa réserve sur les datetimes naïfs des réponses `dict` ad hoc est close par le lot 3.4.
 - **Lot 2 :** terminé : formatage, couverture, tests frontend (unitaires et navigateur), audits, Dependabot, pre-commit et Dockerfile. L’image est construite et démarrée en CI ; les parcours critiques sont joués dans Chromium.
 - **Lot 3 :** terminé : 19 endpoints ad hoc typés, contrat OpenAPI explicite et datetimes sérialisés en UTC sur toutes les réponses concernées.
-- **Points reportés :** section 4 de `docs/ameliorations-proposees.md` (performance, exploitation, sécurité) et autres pistes produit de la section 3.
+- **Lot 4 :** terminé pour le durcissement HTTP (recherche littérale, clé en temps constant, en-têtes) ; la limitation de débit et la CSP restent à étudier.
+- **Points reportés :** performance, exploitation, rétention, test de charge et accessibilité (section 4), ainsi que les autres pistes produit de la section 3.

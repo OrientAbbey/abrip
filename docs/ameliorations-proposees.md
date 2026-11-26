@@ -1,6 +1,6 @@
 # Améliorations proposées pour ABRIP
 
-Ce document conserve l’ensemble des pistes d’amélioration identifiées dans la revue du projet. Les lots 1 à 3 sont terminés et consignés dans `docs/suivi-modifications.md` ; le reste des points 3 et 4 est à planifier.
+Ce document conserve l’ensemble des pistes d’amélioration identifiées dans la revue du projet. Les lots 1 à 4 (correctifs, garde-fous, schémas typés et durcissement HTTP) sont terminés et consignés dans `docs/suivi-modifications.md` ; le reste des points 3 et 4 est à planifier.
 
 ## 1. Correctifs fonctionnels et de fiabilité — terminé
 
@@ -35,8 +35,8 @@ Ce document conserve l’ensemble des pistes d’amélioration identifiées dans
 - **Optimiser l’API** (`src/abrip/api/main.py`, `src/abrip/api/deps.py`) : compression gzip, `ETag`/`Cache-Control` pour les réponses stables et étude d’une réutilisation sûre des connexions DuckDB.
 - **Maîtriser la croissance du stockage** : définir une politique de rétention et de compaction des couches curées et analytiques, au-delà de la rétention des données brutes.
 - **Mesurer la concurrence** : construire un test de charge reproductible (k6 ou Locust) pour quantifier la limite d’usage simultané documentée.
-- **Renforcer les protections HTTP** : comparer les clés API en temps constant, ajouter des en-têtes de sécurité et évaluer une limitation de débit si l’API est exposée.
-- **Rendre la recherche littérale** : échapper `%` et `_` dans les filtres de recherche SQL pour qu’ils ne se comportent pas comme des jokers inattendus.
+- **Renforcer les protections HTTP — fait (partiel)** : clés API comparées en temps constant via `hmac.compare_digest` et en-têtes `nosniff`/`DENY`/`no-referrer`/`Permissions-Policy` sur toutes les réponses. Restent à évaluer la CSP et une limitation de débit si l'API est exposée.
+- **Rendre la recherche littérale — fait** : `escape_like` échappe `\`, `%` et `_`, avec `ESCAPE '\'` sur les quatre filtres SQL concernés.
 - **Automatiser l’accessibilité frontend** : inclure des vérifications WCAG automatisées et des tests des interactions clavier dans le parcours de test frontend.
 
 ## Références
