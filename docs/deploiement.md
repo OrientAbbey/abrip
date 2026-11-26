@@ -353,6 +353,14 @@ dans la requête si elle est courte et sans caractère suspect). Le même
 identifiant est ajouté aux logs JSON sous `request_id`, ce qui permet de passer
 d'une alerte à la trace d'une requête.
 
+### Détection sub-horaire
+
+Le détecteur `subhour_withdrawal` est disponible mais désactivé par défaut dans
+`configs/detection.yaml`. Il regroupe les retraits par fenêtre de 15 minutes,
+exige un pic sur au moins 6 peers puis un retour à la normale dans l'heure.
+L'activer seulement après avoir calibré `window_minutes`, `min_peers` et `ratio`
+sur des données réelles : sur la démonstration, il ne déclenche rien.
+
 ### Qualification des événements (L5)
 
 Les verdicts humains sont conservés dans le catalogue, l'API restant en lecture

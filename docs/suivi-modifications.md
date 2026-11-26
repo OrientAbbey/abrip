@@ -286,6 +286,14 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 - [x] Test : 7 cas (verdicts, précision, allowlist YAML, CLI, silence d'une alerte admissible). Documentation L5 et guide de déploiement mis à jour.
 - [x] La qualification reste une tâche humaine : sans opérateur, la boucle reste vide. Le mécanisme est prêt, le jugement ne s'automatise pas.
 
+## Lot 16 — Détection sub-horaire — **terminé**
+
+### 16.1 Fenêtres courtes — **fait**
+- [x] `anomaly/subhour.py` : `SubHourWithdrawalDetector` regroupe les retraits par fenêtre de 15 minutes, compare à la fenêtre précédente (ratio 3) et exige au moins 6 peers puis un retour à la normale dans l'heure.
+- [x] Enregistré dans `DETECTORS` et configurable dans `configs/detection.yaml` ; **désactivé par défaut**, à activer après calibration sur des données réelles. Les détecteurs historiques restent inchangés.
+- [x] Test : 4 cas (pic court détecté, absence de retour ignorée, seuil de peers, intégration dans `run_detection`) ; documentation L7 et guide de déploiement mis à jour.
+- [x] **Feuille de route complète** : les 16 lots couvrent tous les points des sections 1 à 4, y compris les deux dernières pistes produit (L5 et granularité).
+
 ## Vérification finale du lot 1 + 2
 
 | Vérification | Résultat |
@@ -311,6 +319,7 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 | `tests/test_qualite_donnees.py` | 3 tests : contrat de `/api/quality`, journal d'ingestion, installation vierge |
 | `tests/test_precalcul.py` | 4 tests : équivalence précalcul/calcul direct, fiche AS avant/après, commande CLI, préchauffage |
 | `tests/test_qualification.py` | 7 tests : verdicts persistés, précision, allowlist YAML, commandes CLI, alerte tue par exemption |
+| `tests/test_detection_subhoraire.py` | 4 tests : pic court, absence de retour, seuil de peers, intégration moteur |
 | `npm run test:e2e` | 14 parcours Playwright OK (5 accessibilité, 7 smoke, 2 clavier ; dont 1 exécution en mode CI) |
 | `npm run typecheck` | OK (src, e2e et configurations) |
 | `npm run build` | OK |
@@ -352,6 +361,7 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 | 2026-11-26 | Lot 13 — qualité des données | `api/schemas.py`, `api/routers/system.py`, `pages/Quality.tsx`, `App.tsx`, `Layout.tsx`, `tests/test_qualite_donnees.py` | `/api/quality` typé et page dédiée ; 3 tests API, 14 parcours navigateur |
 | 2026-11-26 | Lot 14 — précalcul | `analytics/precompute.py`, `api/{main,deps}.py`, `api/routers/{explore,system}.py`, `cli.py`, `tests/test_precalcul.py` | `asn_prefix_stats`, bascule automatique et `api.prewarm` ; 4 tests dédiés |
 | 2026-11-26 | Lot 15 — qualification L5 | `catalog.py`, `qualification.py`, `configs/allowlist.yaml`, `cli.py`, `alerting.py`, `tests/test_qualification.py` | Verdicts, précision par détecteur et exemptions appliquées aux alertes ; 7 tests dédiés |
+| 2026-11-26 | Lot 16 — détection sub-horaire | `anomaly/subhour.py`, `anomaly/engine.py`, `configs/detection.yaml`, `tests/test_detection_subhoraire.py` | Détecteur 15 min opt-in ; 4 tests dédiés, feuille de route complète |
 
 ## Bilan
 
@@ -370,4 +380,5 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 - **Lot 13 :** terminé : tableau de qualité des données exposé dans l'API et dans l'interface, sans recalcul.
 - **Lot 14 :** terminé : précalcul des préfixes par AS avec bascule automatique et préchauffage optionnel de la vue d'ensemble.
 - **Lot 15 :** terminé : boucle de qualification L5 outillée (verdicts, précision, allowlist) ; le jugement humain reste nécessaire.
-- **Point reporté :** détection sub-horaire. Toutes les autres pistes des sections 1, 2, 3 et 4 sont traitées.
+- **Lot 16 :** terminé : détecteur sub-horaire opt-in ; la feuille de route est désormais complète.
+- **Réserves restantes :** calibrer `subhour_withdrawal` sur de vraies données avant activation, re-mesurer le gain du précalcul à 50 M de lignes, et poursuivre la qualification humaine (tâche organisationnelle).

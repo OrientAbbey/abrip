@@ -114,9 +114,9 @@ Chaque appel réseau échoue en douceur (`inconclusive`, jamais d'exception) : u
 
 **b) Granularité via RIS Live.** `etl.curate.curate_ris_live_window()` intègre une fenêtre RIS Live capturée (`ingestion.ris_live.capture`) dans la couche curée en quelques secondes, par fusion idempotente avec la partition du jour — sans attendre la publication de l'archive suivante. La commande `abrip detect watch` enchaîne capture, curation et détection en continu.
 
-Précision assumée plutôt que dissimulée : c'est le **délai de disponibilité** de la donnée qui est réduit (de 5-15 minutes à quelques secondes), pas la **granularité d'analyse** des détecteurs eux-mêmes, qui continuent d'opérer au jour calendaire — une évolution plus profonde des signatures de `run_detection`/`build_context` serait nécessaire pour une détection véritablement sub-horaire, et dépasserait le cadre de cette remédiation.
+La granularité d'analyse est désormais traitée elle aussi : `SubHourWithdrawalDetector` regroupe les retraits par fenêtre de 15 minutes, exige un pic sur au moins 6 peers puis un retour à la normale dans l'heure. Il est **opt-in** (`configs/detection.yaml`, `subhour_withdrawal.enabled: false`) : les détecteurs historiques continuent de raisonner par jour et les seuils doivent être calibrés sur des données réelles avant activation.
 
-**Vérifié par :** `tests/test_ris_live_curation.py` (4 tests, y compris la fusion avec une partition existante et l'idempotence sur rejeu) ; `abrip detect watch --minutes 0 --iterations 1` s'exécute de bout en bout sans erreur réseau requise.
+**Vérifié par :** `tests/test_ris_live_curation.py` (4 tests, y compris la fusion avec une partition existante et l'idempotence sur rejeu) ; `abrip detect watch --minutes 0 --iterations 1` s'exécute de bout en bout sans erreur réseau requise ; `tests/test_detection_subhoraire.py` (4 tests : pic court, absence de retour, défaut désactivé, intégration dans le moteur).
 
 ---
 
