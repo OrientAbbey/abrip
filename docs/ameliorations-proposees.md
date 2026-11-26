@@ -1,6 +1,6 @@
 # Améliorations proposées pour ABRIP
 
-Ce document conserve l’ensemble des pistes d’amélioration identifiées dans la revue du projet. Les lots 1 à 5 (correctifs, garde-fous, schémas typés, durcissement HTTP et optimisation du transport) sont terminés et consignés dans `docs/suivi-modifications.md` ; le reste des points 3 et 4 est à planifier.
+Ce document conserve l’ensemble des pistes d’amélioration identifiées dans la revue du projet. Les lots 1 à 6 (correctifs, garde-fous, schémas typés, durcissement HTTP, optimisation du transport et accessibilité/CSP) sont terminés et consignés dans `docs/suivi-modifications.md` ; le reste des points 3 et 4 est à planifier.
 
 ## 1. Correctifs fonctionnels et de fiabilité — terminé
 
@@ -35,9 +35,9 @@ Ce document conserve l’ensemble des pistes d’amélioration identifiées dans
 - **Optimiser l’API — fait** : gzip au-delà de 1 024 octets, ETag faible avec revalidation systématique (304 sans corps), `/api/health` en `no-store`, et une connexion DuckDB par thread réutilisée entre requêtes. Détail dans `docs/performances.md`.
 - **Maîtriser la croissance du stockage** : définir une politique de rétention et de compaction des couches curées et analytiques, au-delà de la rétention des données brutes.
 - **Mesurer la concurrence** : construire un test de charge reproductible (k6 ou Locust) pour quantifier la limite d’usage simultané documentée.
-- **Renforcer les protections HTTP — fait (partiel)** : clés API comparées en temps constant via `hmac.compare_digest` et en-têtes `nosniff`/`DENY`/`no-referrer`/`Permissions-Policy` sur toutes les réponses. Restent à évaluer la CSP et une limitation de débit si l'API est exposée.
+- **Renforcer les protections HTTP — fait** : clés API comparées en temps constant via `hmac.compare_digest`, en-têtes `nosniff`/`DENY`/`no-referrer`/`Permissions-Policy` sur toutes les réponses et CSP sur le HTML de la SPA (Swagger UI exclu). Reste à évaluer une limitation de débit si l'API est exposée.
 - **Rendre la recherche littérale — fait** : `escape_like` échappe `\`, `%` et `_`, avec `ESCAPE '\'` sur les quatre filtres SQL concernés.
-- **Automatiser l’accessibilité frontend** : inclure des vérifications WCAG automatisées et des tests des interactions clavier dans le parcours de test frontend.
+- **Automatiser l’accessibilité frontend — fait (partiel)** : `axe-core` vérifie quatre pages sur les règles WCAG 2.0/2.1 A et AA dans Playwright ; les 55 problèmes de contraste détectés ont été corrigés. Les tests d'interactions clavier restent à ajouter.
 
 ## Références
 

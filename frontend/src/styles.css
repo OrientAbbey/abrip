@@ -12,7 +12,7 @@
   --ink-800: #12293d;
   --ink-700: #1d3b52;
   --ink-500: #3f6079;
-  --ink-400: #63819a;
+  --ink-400: #526e87; /* 5,2:1 sur --paper, 4,8:1 sur --paper-raised */
   --ink-300: #92a9bc;
 
   --paper: #f2f4f1;
@@ -20,7 +20,7 @@
   --paper-sunk: #e6eae6;
   --rule: #cfd8d4;
 
-  --amber: #b8730f;
+  --amber: #8d580a; /* 4,7:1 sur --amber-soft, 5,8:1 sur --paper-raised */
   --amber-soft: #f4e3c8;
   --crimson: #9d2f33;
   --crimson-soft: #f3d9d9;
