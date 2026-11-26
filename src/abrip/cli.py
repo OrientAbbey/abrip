@@ -266,6 +266,7 @@ def detect_run(
     to: str = typer.Option(..., "--to"),
     detectors: str | None = typer.Option(None, help="Sous-ensemble de détecteurs"),
     all_regions: bool = typer.Option(False, help="Ne pas restreindre aux AS africains"),
+    notify: bool = typer.Option(False, help="Alerter les incidents critiques détectés"),
 ) -> None:
     """Exécute les détecteurs et produit la table des candidats d'anomalie."""
     settings, catalog = _bootstrap_runtime()
@@ -279,7 +280,25 @@ def detect_run(
         _split(detectors),
         african_only=not all_regions,
     )
+    if notify:
+        from abrip.alerting import load_recent_incidents, notify_incidents
+
+        fenetre = (_parse_date(to) - _parse_date(from_)).days + 2
+        incidents = load_recent_incidents(settings, fenetre)
+        result["alerting"] = notify_incidents(settings, catalog, incidents)
     console.print(json.dumps(result, indent=2))
+
+
+@detect_app.command("alert")
+def detect_alert(
+    days: int = typer.Option(2, min=1, help="Fenêtre d'incidents à considérer"),
+) -> None:
+    """Envoie les alertes d'incidents pas encore notifiés."""
+    settings, catalog = _bootstrap_runtime()
+    from abrip.alerting import load_recent_incidents, notify_incidents
+
+    incidents = load_recent_incidents(settings, days)
+    console.print(json.dumps(notify_incidents(settings, catalog, incidents), indent=2))
 
 
 @detect_app.command("list")

@@ -247,6 +247,15 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 - [x] `frontend/e2e/clavier.spec.ts` rejoint les éléments uniquement avec Tab : onglets ARIA d'une fiche AS pilotés aux flèches, Début et Fin ; modale ouverte avec Entrée et fermée avec Échap, avec retour du focus sur le déclencheur.
 - [x] Vérification : 12 parcours Playwright OK (4 accessibilité, 6 smoke, 2 clavier), `npm run typecheck` OK.
 
+## Lot 12 — Alerting opérationnel — **terminé**
+
+### 12.1 Notifications d'incidents — **fait**
+- [x] `alerts.webhook_url` (vide par défaut : aucun envoi), `min_severity` (`critical` par défaut), `dedupe_days` (7) et `timeout_seconds` (10).
+- [x] `alerting.py` : sélection par sévérité, message lisible (préfixe, résumé, détecteurs, score, date), envoi webhook compatible Slack, puis mémorisation dans la table `alert_log` du catalogue. Un webhook en échec est journalisé et **n'interrompt jamais** la détection.
+- [x] Déduplication par `incident_id` avec oubli des entrées plus anciennes que `dedupe_days` ; les incidents lus depuis les Parquet sont filtrés sur `last_seen`.
+- [x] `abrip detect run --notify` et `abrip detect alert --days N` ; 6 tests sans réseau (sévérité, déduplication, échec HTTP, absence de webhook, lecture des incidents récents, commande CLI).
+- [x] Compatibilité Windows : les fuseaux horaires des colonnes Parquet sont retirés avant conversion en dictionnaires Python (tzdata absent localement).
+
 ## Vérification finale du lot 1 + 2
 
 | Vérification | Résultat |
@@ -268,6 +277,7 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 | `tests/test_metriques_prometheus.py` | 8 tests : `X-Request-ID`, corrélation JSON, format Prometheus, seaux cumulatifs, jauges, modèles de route |
 | `tests/test_api_workers.py` | 5 tests : option CLI, configuration, incompatibilité `--reload`, refus de `--workers 0` |
 | `tests/test_limite_debit.py` | 6 tests : fenêtre glissante, limite par client, 429, exemption supervision, comptage 429, défaut désactivé |
+| `tests/test_alerting.py` | 6 tests : sévérité, déduplication, échec HTTP, webhook absent, incidents récents, commande CLI |
 | `npm run test:e2e` | 12 parcours Playwright OK (4 accessibilité, 6 smoke, 2 clavier ; dont 1 exécution en mode CI) |
 | `npm run typecheck` | OK (src, e2e et configurations) |
 | `npm run build` | OK |
@@ -305,6 +315,7 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 | 2026-11-26 | Lot 9 — observabilité | `api/{main,metrics}.py`, `logging_conf.py`, `tests/test_metriques_prometheus.py`, `docs/deploiement.md` | `X-Request-ID` corrélé aux logs, métriques Prometheus sans dépendance ; 8 tests dédiés et 10 parcours navigateur OK |
 | 2026-11-26 | Lot 10 — montée en workers | `config.py`, `cli.py`, `tests/test_api_workers.py`, `docs/{deploiement,performances}.md` | `--workers` et `api.workers`, garde-fous CLI ; 5 tests, re-mesure sans gain de débit sur un cœur partagé |
 | 2026-11-26 | Lot 11 — finitions de sécurité | `config.py`, `api/{main,rate_limit}.py`, `tests/test_limite_debit.py`, `e2e/clavier.spec.ts` | 429 avec `Retry-After` et exemption supervision ; 6 tests Python, 2 parcours clavier, 12 parcours au total |
+| 2026-11-26 | Lot 12 — alerting | `config.py`, `alerting.py`, `cli.py`, `storage/catalog.py`, `tests/test_alerting.py`, `docs/deploiement.md` | Webhook Slack, déduplication par incident, `--notify` et `detect alert` ; 6 tests sans réseau |
 
 ## Bilan
 
@@ -319,4 +330,5 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 - **Lot 9 :** terminé : identifiant de requête corrélé aux logs et exposition Prometheus des latences, erreurs et volumes stockés.
 - **Lot 10 :** terminé : service multi-processus configurable, avec mesure locale montrant l'absence de gain sur un cœur partagé et la limitation des métriques à un worker.
 - **Lot 11 :** terminé : limitation de débit configurable et parcours clavier automatisés ; les points 1, 2 et 4 de la feuille de route sont désormais tous traités.
-- **Points reportés :** précalcul des endpoints coûteux et autres pistes produit de la section 3.
+- **Lot 12 :** terminé : alertes webhook sur incidents critiques avec déduplication persistée, sans réseau dans les tests.
+- **Points reportés :** boucle de qualification humaine L5, détection sub-horaire, tableau de qualité des données, précalcul des endpoints coûteux.

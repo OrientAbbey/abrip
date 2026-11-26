@@ -148,6 +148,19 @@ class ApiSettings(BaseModel):
     static_dir: str = "frontend/dist"
 
 
+class AlertSettings(BaseModel):
+    """Alertes sur incidents : webhook au format Slack, déduplication persistée.
+
+    Aucune alerte n'est envoyée tant que `webhook_url` est vide : le pipeline
+    reste muet par défaut, y compris en démonstration.
+    """
+
+    webhook_url: str | None = None
+    min_severity: Literal["info", "watch", "critical"] = "critical"
+    dedupe_days: int = 7
+    timeout_seconds: float = 10.0
+
+
 class EnrichmentSettings(BaseModel):
     """Sources externes de corroboration — remédiations L1, L3 et L4a.
 
@@ -208,6 +221,7 @@ class Settings(BaseSettings):
     reference: ReferenceSettings = Field(default_factory=ReferenceSettings)
     analytics: AnalyticsSettings = Field(default_factory=AnalyticsSettings)
     api: ApiSettings = Field(default_factory=ApiSettings)
+    alerts: AlertSettings = Field(default_factory=AlertSettings)
     enrichment: EnrichmentSettings = Field(default_factory=EnrichmentSettings)
 
     collectors: list[Collector] = Field(default_factory=list)
