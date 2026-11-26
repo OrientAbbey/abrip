@@ -107,6 +107,10 @@ class EtlSettings(BaseModel):
     sort_partitions: bool = True
     row_group_size: int = 100_000
     sort_memory_limit: str = "1GB"  # le tri déborde sur disque au-delà
+    # Rétention des couches curées et analytiques. Doit rester supérieure à
+    # ingestion.raw_retention_days : les MRT disparaissent avant les Parquet
+    # qu'ils ont produits. La purge n'est jamais automatique (voir `etl purge`).
+    retention_days: int = 90
 
 
 class ReferenceSettings(BaseModel):

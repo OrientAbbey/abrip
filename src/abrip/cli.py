@@ -216,6 +216,31 @@ def etl_compact() -> None:
     console.print(json.dumps(compact_bgp_elements(settings), indent=2))
 
 
+@etl_app.command("purge")
+def etl_purge(
+    days: int | None = typer.Option(None, help="Jours conservés (défaut : etl.retention_days)"),
+    apply: bool = typer.Option(False, "--apply", help="Supprimer réellement (défaut : simulation)"),
+) -> None:
+    """Purge les partitions curées et analytiques au-delà de la rétention.
+
+    Sans `--apply`, la commande ne fait que simuler et affiche ce qu'elle
+    supprimerait. `--days` permet de choisir une fenêtre plus courte pour un
+    nettoyage ponctuel, sans modifier la configuration.
+    """
+    settings, catalog = _bootstrap_runtime()
+    if days is not None and days < 1:
+        raise typer.BadParameter("--days doit être au moins 1")
+    from abrip.storage.retention import execute, plan
+
+    targets, cutoff = plan(settings, days=days)
+    counters = execute(targets, catalog, dry_run=not apply)
+    bilan: dict[str, object] = {**counters}
+    bilan["applied"] = apply
+    bilan["days"] = settings.etl.retention_days if days is None else days
+    bilan["cutoff"] = cutoff.isoformat()
+    console.print(json.dumps(bilan, indent=2))
+
+
 # --- analytics -------------------------------------------------------------
 @analytics_app.command("compute")
 def analytics_compute(

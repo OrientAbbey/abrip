@@ -1,6 +1,6 @@
 # Améliorations proposées pour ABRIP
 
-Ce document conserve l’ensemble des pistes d’amélioration identifiées dans la revue du projet. Les lots 1 à 7 (correctifs, garde-fous, schémas typés, durcissement HTTP, optimisation du transport, accessibilité/CSP et mesure de concurrence) sont terminés et consignés dans `docs/suivi-modifications.md` ; le reste des points 3 et 4 est à planifier.
+Ce document conserve l’ensemble des pistes d’amélioration identifiées dans la revue du projet. Les lots 1 à 8 (correctifs, garde-fous, schémas typés, durcissement HTTP, optimisation du transport, accessibilité/CSP, mesure de concurrence et rétention) sont terminés et consignés dans `docs/suivi-modifications.md` ; le reste des points 3 et 4 est à planifier.
 
 ## 1. Correctifs fonctionnels et de fiabilité — terminé
 
@@ -33,7 +33,7 @@ Ce document conserve l’ensemble des pistes d’amélioration identifiées dans
 
 - **Réduire les temps de réponse analytiques** (`docs/performances.md`) : cibler la fiche AS et la vue d’ensemble, notamment via des pré-calculs adaptés et le préchauffage du cache.
 - **Optimiser l’API — fait** : gzip au-delà de 1 024 octets, ETag faible avec revalidation systématique (304 sans corps), `/api/health` en `no-store`, et une connexion DuckDB par thread réutilisée entre requêtes. Détail dans `docs/performances.md`.
-- **Maîtriser la croissance du stockage** : définir une politique de rétention et de compaction des couches curées et analytiques, au-delà de la rétention des données brutes.
+- **Maîtriser la croissance du stockage — fait** : `etl.retention_days` (90 jours) pour les couches curées et analytiques, `abrip etl purge` simulé par défaut (`--apply` pour supprimer), avec nettoyage du catalogue. La compaction des fragments reste assurée par `abrip etl compact`. Procédure dans `docs/deploiement.md`.
 - **Mesurer la concurrence — fait** : `scripts/bench/run_charge.py` génère une charge asyncio configurable et rapporte débit et percentiles ; première mesure locale dans `docs/performances.md` (débit plafonnant vers 4,3 req/s sur une instance). La montée en workers reste à étudier.
 - **Renforcer les protections HTTP — fait** : clés API comparées en temps constant via `hmac.compare_digest`, en-têtes `nosniff`/`DENY`/`no-referrer`/`Permissions-Policy` sur toutes les réponses et CSP sur le HTML de la SPA (Swagger UI exclu). Reste à évaluer une limitation de débit si l'API est exposée.
 - **Rendre la recherche littérale — fait** : `escape_like` échappe `\`, `%` et `_`, avec `ESCAPE '\'` sur les quatre filtres SQL concernés.
