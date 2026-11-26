@@ -67,7 +67,7 @@ class TestPrometheus:
             float(line.rsplit(" ", 1)[1])
             for line in body.splitlines()
             if line.startswith(
-                'abrip_http_request_duration_seconds_bucket{method="GET",path="/api/health"'
+                'abrip_http_request_duration_seconds_bucket{method="GET",path="/api/health",status="200"'
             )
         ]
         assert len(values) == len(BUCKETS) + 1
