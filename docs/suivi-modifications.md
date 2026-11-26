@@ -2,6 +2,8 @@
 
 Ce fichier est le carnet d’exécution des améliorations listées dans `docs/ameliorations-proposees.md`. Une case n’est cochée qu’après vérification réelle ; les points non faits restent ouverts avec leur raison.
 
+Pour une vue consolidée et détaillée des seize lots, voir `docs/bilan-general.md`.
+
 ## Lot 1 — Correctifs fonctionnels et fiabilité — **terminé**
 
 ### 1.1 Historique des métriques
