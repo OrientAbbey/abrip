@@ -29,10 +29,13 @@ def test_api_key_matches_avec_cle():
 
 
 class TestEnTetesDeSecurite:
-    @pytest.mark.parametrize("path", ["/api/health", "/"])
-    def test_en_tetes_present_sur_api_et_spa(self, client, path):
+    # `/` n'est pas testé ici : il ne répond que si `frontend/dist` est compilé,
+    # ce qui n'est pas le cas du job Python en CI. Le middleware est global,
+    # donc une réponse d'API et une réponse d'erreur suffisent à le couvrir.
+    @pytest.mark.parametrize(("path", "status"), [("/api/health", 200), ("/api/inconnue", 404)])
+    def test_en_tetes_present_sur_api_et_erreurs(self, client, path, status):
         response = client.get(path)
-        assert response.status_code == 200
+        assert response.status_code == status
         assert response.headers["X-Content-Type-Options"] == "nosniff"
         assert response.headers["X-Frame-Options"] == "DENY"
         assert response.headers["Referrer-Policy"] == "no-referrer"
