@@ -166,6 +166,23 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 - [x] Pas de CSP ajoutée dans ce lot : le frontend embarque des styles en ligne et la règle doit être vérifiée parcours par parcours avant déploiement. À reprendre avec les tests d’accessibilité.
 - [x] Vérification : 40 tests ciblés et 4 parcours navigateur OK.
 
+## Lot 5 — Optimisation HTTP — **terminé**
+
+### 5.1 Compression gzip — **fait**
+- [x] `GZipMiddleware` sur les réponses de plus de 1 024 octets (`GZIP_MIN_SIZE`), API et documentation comprises ; les petites réponses ne sont pas compressées.
+- [x] Test : `/api/openapi.json` est compressé quand le client envoie `Accept-Encoding: gzip`, `/api/search` (corps minimal) ne l'est pas.
+
+### 5.2 ETag et revalidation — **fait**
+- [x] ETag faible (SHA-256 du corps JSON) et `Cache-Control: private, no-cache` sur les réponses JSON 200 : revalidation à chaque appel, **304 sans corps** si le contenu est inchangé. Étiquette faible car le même JSON peut être servi compressé ou non.
+- [x] `/api/health` est exclu (`no-store`) : son `generated_at` change à chaque appel et la supervision doit voir l'état courant.
+- [x] Les erreurs (404, 503, 422) ne portent ni ETag ni `Cache-Control`.
+- [x] Test : ETag présent, 304 sur `If-None-Match` exact et `*`, ETag différent selon les paramètres de requête, santé non cachée.
+
+### 5.3 Connexions DuckDB — **fait**
+- [x] `DataAccess` garde une connexion par thread (`threading.local`) au lieu d'en ouvrir une par requête : pas de verrou global, une connexion n'étant pas partageable entre threads.
+- [x] Test : même connexion réutilisée dans un thread, connexion distincte dans un autre.
+- [x] Détail et limites des mesures dans `docs/performances.md` (section « Transport HTTP »).
+
 ## Vérification finale du lot 1 + 2
 
 | Vérification | Résultat |
@@ -179,6 +196,7 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 | `npm test` | 11 tests OK |
 | `tests/test_api_contrat_schemas.py` | 16 tests de contrat (OpenAPI, facets, pays, noms AS, incidents UTC, relations, préfixes, voisins, historiques, périodes, fiches AS/préfixe/timeline, propagation et amonts) |
 | `tests/test_securite_http.py`, `test_recherche_litterale.py` | 40 tests ciblés au total avec API/noms AS, dont en-têtes, clé API et jokers SQL |
+| `tests/test_http_cache.py`, `test_acces_donnees.py` | 11 tests : gzip, ETag/304, `no-store` de la santé, réutilisation des connexions DuckDB |
 | `npm run test:e2e` | 4 parcours Playwright OK (dont 1 exécution en mode CI) |
 | `npm run typecheck` | OK (src, e2e et configurations) |
 | `npm run build` | OK |
@@ -209,6 +227,7 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 | 2026-11-25 | Lot 3, sous-lot 3.4 | `api/schemas.py`, `api/routers/{explore,events}.py`, `tests/test_api_contrat_schemas.py` | 3 fiches typées ; datetimes en `Z` ; 13 tests de contrat et 4 parcours navigateur OK |
 | 2026-11-25 | Lot 3, sous-lot 3.5 | `api/schemas.py`, `api/routers/propagation.py`, `tests/test_api_contrat_schemas.py` | 3 endpoints typés ; `path_ids` conditionnel préservé ; 46 tests ciblés et 4 parcours navigateur OK |
 | 2026-11-26 | Lot 4 — durcissement HTTP | `api/{main,deps,search}.py`, `api/routers/explore.py`, `tests/test_securite_http.py`, `tests/test_recherche_litterale.py` | En-têtes, clé en temps constant, LIKE échappé ; 40 tests ciblés et 4 parcours navigateur OK |
+| 2026-11-26 | Lot 5 — optimisation HTTP | `api/{main,deps}.py`, `tests/{test_http_cache,test_acces_donnees}.py`, `docs/performances.md` | gzip, ETag/304, santé `no-store`, connexions DuckDB par thread ; 11 tests dédiés et 49 tests ciblés OK |
 
 ## Bilan
 
@@ -216,4 +235,5 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 - **Lot 2 :** terminé : formatage, couverture, tests frontend (unitaires et navigateur), audits, Dependabot, pre-commit et Dockerfile. L’image est construite et démarrée en CI ; les parcours critiques sont joués dans Chromium.
 - **Lot 3 :** terminé : 19 endpoints ad hoc typés, contrat OpenAPI explicite et datetimes sérialisés en UTC sur toutes les réponses concernées.
 - **Lot 4 :** terminé pour le durcissement HTTP (recherche littérale, clé en temps constant, en-têtes) ; la limitation de débit et la CSP restent à étudier.
-- **Points reportés :** performance, exploitation, rétention, test de charge et accessibilité (section 4), ainsi que les autres pistes produit de la section 3.
+- **Lot 5 :** terminé pour le transport HTTP (gzip, ETag/304, connexions DuckDB par thread) ; les gains n'ont pas été re-mesurés sur les jeux à 50 M de lignes.
+- **Points reportés :** rétention et compaction, test de charge, accessibilité automatisée et CSP, limitation de débit, ainsi que les autres pistes produit de la section 3.

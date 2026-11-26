@@ -8,13 +8,15 @@ liste `api.cors_origins` qui l'autorise.
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from abrip import __version__
@@ -40,6 +42,26 @@ def _error(status_code: int, code: str, message: str, details: dict[str, Any] | 
         status_code=status_code,
         content={"error": {"code": code, "message": message, "details": details or {}}},
     )
+
+
+# En dessous, compresser coûte plus qu'envoyer : les petites réponses JSON
+# (santé, une ligne) partent telles quelles.
+GZIP_MIN_SIZE = 1024
+
+# Réponses volontairement jamais mises en cache : `/health` porte un horodatage
+# de génération et doit refléter l'état courant (supervision).
+NO_STORE_PATHS = frozenset({"/api/health"})
+
+
+def _weak_etag(body: bytes) -> str:
+    """Étiquette faible : le même JSON peut être servi compressé ou non."""
+    return f'W/"{hashlib.sha256(body).hexdigest()[:32]}"'
+
+
+def _etag_matches(header: str | None, etag: str) -> bool:
+    if not header:
+        return False
+    return any(candidate.strip() in {etag, "*"} for candidate in header.split(","))
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -99,6 +121,39 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "Permissions-Policy", "geolocation=(), microphone=(), camera=()"
         )
         return response
+
+    # ETag + Cache-Control sur les réponses JSON. Le corps est déjà entièrement
+    # construit par FastAPI : le relire ici ne coûte qu'une copie mémoire. Le
+    # client revalide à chaque fois (`no-cache`) et un 304 lui évite de
+    # retélécharger plusieurs kilo-octets identiques.
+    @app.middleware("http")
+    async def cache_headers(request: Request, call_next):
+        response = await call_next(request)
+        if request.url.path in NO_STORE_PATHS:
+            response.headers["cache-control"] = "no-store"
+            return response
+        if (
+            request.method != "GET"
+            or response.status_code != 200
+            or not response.headers.get("content-type", "").startswith("application/json")
+        ):
+            return response
+        body = b"".join([chunk async for chunk in response.body_iterator])
+        etag = _weak_etag(body)
+        headers = dict(response.headers)
+        headers["etag"] = etag
+        headers["cache-control"] = "private, no-cache"
+        headers["vary"] = "Accept-Encoding"
+        if _etag_matches(request.headers.get("if-none-match"), etag):
+            headers.pop("content-length", None)
+            return Response(status_code=304, headers=headers)
+        return Response(content=body, status_code=200, headers=headers)
+
+    # Compression ajoutée en dernier : Starlette place chaque middleware en
+    # tête de pile, celui-ci devient donc le plus externe. L'ETag reste calculé
+    # sur le JSON non compressé, d'où l'étiquette faible (valable quel que soit
+    # l'encodage négocié).
+    app.add_middleware(GZipMiddleware, minimum_size=GZIP_MIN_SIZE)
 
     for router in (
         system.router,

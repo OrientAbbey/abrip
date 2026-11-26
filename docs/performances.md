@@ -115,6 +115,23 @@ pourtant dans de petites tables, une par jour (`analytics/daily.py`) :
   ne porte que des indices ; omise au-delà de 3 000 chemins distincts ou 400 000
   références (le client se rabat alors sur les liens directs).
 
+## Transport HTTP
+
+- **Compression gzip** sur les réponses de plus de 1 024 octets, quelle que soit
+  la route (API et documentation). En dessous, la compression coûte plus qu'elle
+  n'économise. Le client n'a qu'à envoyer `Accept-Encoding: gzip`.
+- **ETag faible** (SHA-256 du corps JSON) et `Cache-Control: private, no-cache` :
+  le navigateur revalide à chaque appel et reçoit un **304 sans corps** quand rien
+  n'a changé. Le gain porte sur les octets transférés, pas sur le calcul serveur —
+  les requêtes rejouent normalement. `/api/health` est volontairement `no-store` :
+  il porte un horodatage de génération et sert à la supervision.
+- **Connexions DuckDB** : une par thread de travail, réutilisée entre les requêtes
+  (`threading.local`). Une connexion DuckDB n'est pas partageable entre threads ;
+  le thread-local évite un verrou global tout en conservant le catalogue entre
+  deux requêtes d'un même appel (une fiche AS en enchaîne plusieurs).
+- Ces changements n'ont pas été re-mesurés sur les jeux de 50 M de lignes : les
+  temps du tableau ci-dessus restent ceux du calcul seul, sans transport.
+
 ## Ce qui ne passe pas encore à l'échelle
 
 | Point | Constat à 50 M de lignes | Piste |
