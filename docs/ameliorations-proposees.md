@@ -1,6 +1,6 @@
 # Améliorations proposées pour ABRIP
 
-Ce document conserve l’ensemble des pistes d’amélioration identifiées dans la revue du projet. Les lots 1 à 15 (correctifs, garde-fous, schémas typés, durcissement HTTP, optimisation du transport, accessibilité/CSP, mesure de concurrence, rétention, observabilité, montée en workers, finitions de sécurité, alerting, qualité des données, précalcul et qualification L5) sont terminés et consignés dans `docs/suivi-modifications.md` ; seule la détection sub-horaire reste à planifier.
+Ce document conserve l’ensemble des pistes d’amélioration identifiées dans la revue du projet. Les lots 1 à 16 (correctifs, garde-fous, schémas typés, durcissement HTTP, optimisation du transport, accessibilité/CSP, mesure de concurrence, rétention, observabilité, montée en workers, finitions de sécurité, alerting, qualité des données, précalcul, qualification L5 et détection sub-horaire) sont terminés et consignés dans `docs/suivi-modifications.md`. La feuille de route est complète ; les réserves de calibration et de mesure restent documentées dans le suivi.
 
 ## 1. Correctifs fonctionnels et de fiabilité — terminé
 
@@ -24,7 +24,7 @@ Ce document conserve l’ensemble des pistes d’amélioration identifiées dans
 
 - **Boucle de qualification humaine L5 — fait (outillage)** : `abrip detect label`, `abrip detect precision`, `abrip detect allowlist` et la table `event_feedback` rendent la précision mesurable ; le jugement reste humain. Voir `docs/limites-et-remediations.md`.
 - **Schémas de réponse typés partout — lot 3 terminé** : les 19 endpoints qui renvoyaient des `dict` ad hoc (statistiques de préfixe, séries DuckDB, fiches, tableaux, historiques, propagation) ont désormais un `response_model` Pydantic explicite. La sérialisation UTC est unifiée via `ApiModel` et les clés conditionnelles du contrat sont préservées. Détail des sous-lots dans `docs/suivi-modifications.md`.
-- **Détection sub-horaire** : compléter les détecteurs raisonnant actuellement par jour avec des fenêtres glissantes et des signatures adaptées aux incidents courts.
+- **Détection sub-horaire — fait (opt-in)** : `subhour_withdrawal` analyse les retraits par fenêtres de 15 minutes avec exigence de retour à la normale. Désactivé par défaut le temps de calibrer les seuils sur des données réelles.
 - **Alerting opérationnel — fait** : webhook compatible Slack pour les incidents au seuil configuré (`critical` par défaut), déduplication par `incident_id` dans le catalogue, commandes `detect run --notify` et `detect alert`. Configuration et échecs non bloquants documentés dans `docs/deploiement.md`.
 - **Tableau de qualité des données — fait** : `GET /api/quality` et une page dédiée exposent la fraîcheur par source, la couverture par pays, le volume du référentiel ROA et les collecteurs silencieux, sans recalcul.
 - **Métriques d’exploitation — fait** : `/api/metrics` expose compteurs HTTP, histogramme de latence par modèle de route et jauges de taille/fraîcheur des couches ; chaque réponse porte un `X-Request-ID` également présent dans les logs JSON. Configuration de scrape dans `docs/deploiement.md`.

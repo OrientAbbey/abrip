@@ -25,6 +25,7 @@ from abrip.anomaly.detectors import (
     ValleyFreeDetector,
     VisibilityDropDetector,
 )
+from abrip.anomaly.subhour import SubHourWithdrawalDetector
 from abrip.config import Settings
 from abrip.logging_conf import get_logger, log_http_error
 from abrip.models import EVENTS_SCHEMA, Event, Incident
@@ -44,6 +45,7 @@ DETECTORS: dict[str, type[Detector]] = {
     ChurnSpikeDetector.name: ChurnSpikeDetector,
     VisibilityDropDetector.name: VisibilityDropDetector,
     BogonDetector.name: BogonDetector,
+    SubHourWithdrawalDetector.name: SubHourWithdrawalDetector,
 }
 
 

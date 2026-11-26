@@ -46,6 +46,14 @@ detectors:
   bogon:
     enabled: true
     score_weight: 0.10
+  # L7 — incidents courts, opt-in : un retrait massif suivi d'un retour rapide.
+  subhour_withdrawal:
+    enabled: false
+    window_minutes: 15
+    min_peers: 6
+    ratio: 3.0
+    max_duration_minutes: 60
+    score_weight: 0.10
 
 correlation:
   incident_window_minutes: 60
