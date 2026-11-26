@@ -346,6 +346,19 @@ dans la requête si elle est courte et sans caractère suspect). Le même
 identifiant est ajouté aux logs JSON sous `request_id`, ce qui permet de passer
 d'une alerte à la trace d'une requête.
 
+### Limitation de débit
+
+`api.rate_limit_per_minute` (ou `ABRIP_API__RATE_LIMIT_PER_MINUTE`) borne le
+nombre de requêtes par minute et par adresse. Le défaut `0` désactive la
+limitation. Au-delà, l'API répond **429** avec un corps d'erreur normalisé et
+un en-tête `Retry-After` ; `/api/health` et `/api/metrics` sont exemptés pour ne
+pas aveugler la supervision.
+
+La limite est **locale à chaque worker** et utilise l'adresse vue par uvicorn.
+Derrière un reverse proxy, plusieurs clients peuvent partager la même adresse :
+soit le proxy transmet la bonne adresse, soit la limitation doit être portée par
+un composant dédié.
+
 ### Montée en workers
 
 `abrip api serve --workers 4` lance quatre processus uvicorn ; la variable
