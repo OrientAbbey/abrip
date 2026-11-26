@@ -3,7 +3,7 @@
 La plateforme se déploie gratuitement et sans modification du code. Trois propriétés le permettent :
 
 - **aucune base de données externe** — les données sont des fichiers Parquet lus par DuckDB ;
-- **un seul processus** — FastAPI sert à la fois l'API et le frontend compilé ;
+- **un seul processus par défaut** — FastAPI sert à la fois l'API et le frontend compilé (la montée en workers reste optionnelle) ;
 - **un jeu de données de 3,4 Mo** — il tient dans l'image, donc aucun volume persistant n'est nécessaire.
 
 Ce guide couvre trois hébergements gratuits, du plus adapté au moins adapté, puis l'automatisation du déploiement.
@@ -345,6 +345,20 @@ Chaque réponse porte un en-tête `X-Request-ID` (UUID généré, ou valeur reç
 dans la requête si elle est courte et sans caractère suspect). Le même
 identifiant est ajouté aux logs JSON sous `request_id`, ce qui permet de passer
 d'une alerte à la trace d'une requête.
+
+### Montée en workers
+
+`abrip api serve --workers 4` lance quatre processus uvicorn ; la variable
+`ABRIP_API__WORKERS=4` fait de même sans changer la commande. Le défaut reste
+`1` : avec un seul processus, le cache en mémoire et les index RPKI/IRR sont
+partagés entre toutes les requêtes. `--reload` est réservé au développement et
+est incompatible avec plusieurs workers.
+
+Attention : chaque worker possède **son propre cache et ses propres compteurs
+Prometheus**. Un scrape de `/api/metrics` ne voit qu'un seul worker ; les
+chiffres sont des indicateurs par processus, pas un total agrégé. Sur une
+machine à un cœur, la montée en workers n'apporte pas de gain de débit (voir
+`docs/performances.md`) : mesurer avant de changer le réglage.
 
 ### Premier essai réel : un collecteur, un jour
 

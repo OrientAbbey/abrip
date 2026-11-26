@@ -226,6 +226,15 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 - [x] Test : format HELP/TYPE, compteurs par route, cumul des seaux, jauges de couches, protection par clé ; 10 parcours navigateur OK.
 - [x] Configuration de scrape et usage de l'en-tête documentés dans `docs/deploiement.md`.
 
+## Lot 10 — Montée en workers — **terminé**
+
+### 10.1 Service multi-processus — **fait**
+- [x] `abrip api serve --workers N` et `api.workers` (`ABRIP_API__WORKERS`) configures uvicorn en multi-processus ; défaut inchangé à 1.
+- [x] `--reload` est refusé avec plusieurs workers, `--workers 0` est rejeté.
+- [x] Test : 5 cas (défaut, option CLI, configuration, incompatibilité reload, valeur nulle) sans démarrer de serveur.
+- [x] Re-mesure avec 4 workers sur le jeu de démonstration : 3,6 req/s et p95 8,21 s à 10 utilisateurs, contre 4,3 req/s et 9,39 s avec un worker — aucun gain de débit sur cette machine à cœur partagé. Résultat et limites consignés dans `docs/performances.md`.
+- [x] Documentation : chaque worker a son propre cache et ses propres compteurs Prometheus ; un scrape ne représente qu'un processus.
+
 ## Vérification finale du lot 1 + 2
 
 | Vérification | Résultat |
@@ -244,6 +253,7 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 | `scripts/bench/run_charge.py` | Générateur async sans dépendance : `--users`, `--duration`, `--think`, `--json` ; rapport p50/p95/p99 par endpoint |
 | `tests/test_retention.py` | 7 tests : plan de purge, dates invalides ignorées, simulation, purge effective, nettoyage du catalogue, CLI |
 | `tests/test_metriques_prometheus.py` | 8 tests : `X-Request-ID`, corrélation JSON, format Prometheus, seaux cumulatifs, jauges, modèles de route |
+| `tests/test_api_workers.py` | 5 tests : option CLI, configuration, incompatibilité `--reload`, refus de `--workers 0` |
 | `npm run test:e2e` | 10 parcours Playwright OK (4 accessibilité, 6 smoke ; dont 1 exécution en mode CI) |
 | `npm run typecheck` | OK (src, e2e et configurations) |
 | `npm run build` | OK |
@@ -278,7 +288,8 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 | 2026-11-26 | Lot 6 — accessibilité et CSP | `api/main.py`, `src/styles.css`, `e2e/{accessibilite,smoke}.spec.ts`, `tests/test_securite_http.py` | 55 problèmes de contraste corrigés, axe WCAG sur 4 pages, CSP sur la SPA ; 21 tests Python et 9 parcours navigateur OK |
 | 2026-11-26 | Lot 7 — mesure de concurrence | `scripts/bench/run_charge.py`, `docs/performances.md` | 2,2 à 4,3 req/s selon la concurrence ; p95 de 1,25 s à 9,39 s sur le jeu de démonstration |
 | 2026-11-26 | Lot 8 — rétention des couches dérivées | `config.py`, `storage/retention.py`, `cli.py`, `tests/test_retention.py`, `docs/deploiement.md` | `etl purge` simulé par défaut, `--apply` explicite, catalogue nettoyé ; 7 tests dédiés |
-| 2026-11-26 | Lot 9 — observabilité | `api/{main,metrics}.py`, `logging_conf.py`, `tests/test_observabilite.py`, `docs/deploiement.md` | `X-Request-ID` corrélé aux logs, métriques Prometheus sans dépendance ; 8 tests dédiés et 10 parcours navigateur OK |
+| 2026-11-26 | Lot 9 — observabilité | `api/{main,metrics}.py`, `logging_conf.py`, `tests/test_metriques_prometheus.py`, `docs/deploiement.md` | `X-Request-ID` corrélé aux logs, métriques Prometheus sans dépendance ; 8 tests dédiés et 10 parcours navigateur OK |
+| 2026-11-26 | Lot 10 — montée en workers | `config.py`, `cli.py`, `tests/test_api_workers.py`, `docs/{deploiement,performances}.md` | `--workers` et `api.workers`, garde-fous CLI ; 5 tests, re-mesure sans gain de débit sur un cœur partagé |
 
 ## Bilan
 
@@ -291,4 +302,5 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 - **Lot 7 :** terminé : test de charge asyncio reproductible et première mesure de concurrence, consignée dans `docs/performances.md`.
 - **Lot 8 :** terminé : rétention des couches curées et analytiques avec purge simulée par défaut et nettoyage du catalogue ; la compaction existante reste documentée.
 - **Lot 9 :** terminé : identifiant de requête corrélé aux logs et exposition Prometheus des latences, erreurs et volumes stockés.
-- **Points reportés :** limitation de débit, tests d'interactions clavier, montée en workers pour la concurrence, ainsi que les autres pistes produit de la section 3.
+- **Lot 10 :** terminé : service multi-processus configurable, avec mesure locale montrant l'absence de gain sur un cœur partagé et la limitation des métriques à un worker.
+- **Points reportés :** limitation de débit, tests d'interactions clavier, précalcul des endpoints coûteux, ainsi que les autres pistes produit de la section 3.

@@ -163,13 +163,19 @@ local, une seule instance uvicorn :
 | 5 | 43 | 1,07 s | 4,12 s |
 | 10 | 43 | 1,22 s | 9,39 s |
 
-Lecture : le débit plafonne vers 4,3 requêtes/s et la latence p95 explose avec
-la concurrence. Le service est mono-processus et les endpoints analytiques
-utilisent DuckDB sur un seul cœur : la voie de montée est de lancer plusieurs
-workers (la connexion DuckDB étant par thread, chaque worker reste sûr) et de
-précalculer les endpoints qui reviennent le plus. Ces chiffres ne sont pas
-transposables à une machine ou un jeu de données différents : c'est la
-procédure qui est reproductible, pas la valeur absolue.
+Avec `--workers 4` sur la même machine, 10 utilisateurs pendant 15 s : 54
+requêtes (3,6 req/s), p50 2,33 s, p95 8,21 s. Une première mesure à 10 s
+n'avait donné que 2,1 req/s, le temps que chaque worker construise ses index.
+Autrement dit : **pas de gain de débit sur un cœur partagé**, et un p95 du même
+ordre. La voie de montée reste le précalcul des endpoints les plus demandés,
+pas l'empilement de processus sur une machine sans cœurs disponibles.
+
+Le débit plafonne vers 4 requêtes/s et la latence p95 explose avec la
+concurrence : les endpoints analytiques utilisent DuckDB et la machine de mesure
+n'a qu'un cœur. Ces chiffres ne sont pas transposables à une machine ou un jeu
+de données différents : c'est la procédure qui est reproductible, pas la valeur
+absolue. Avec plusieurs workers, `/api/metrics` ne couvre qu'un processus (voir
+`docs/deploiement.md`).
 
 ## Limites de ces mesures
 
