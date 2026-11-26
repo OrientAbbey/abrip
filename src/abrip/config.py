@@ -138,6 +138,10 @@ class ApiSettings(BaseModel):
     api_key: str | None = None
     cache_ttl_seconds: int = 60
     max_page_size: int = 500
+    # Nombre de processus uvicorn. Un seul par défaut : le préchauffage et le
+    # cache en mémoire sont alors partagés par toutes les requêtes. Au-delà,
+    # chaque processus a son propre cache et ses propres compteurs Prometheus.
+    workers: int = 1
     static_dir: str = "frontend/dist"
 
 

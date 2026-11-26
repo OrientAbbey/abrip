@@ -1,6 +1,6 @@
 # Améliorations proposées pour ABRIP
 
-Ce document conserve l’ensemble des pistes d’amélioration identifiées dans la revue du projet. Les lots 1 à 9 (correctifs, garde-fous, schémas typés, durcissement HTTP, optimisation du transport, accessibilité/CSP, mesure de concurrence, rétention et observabilité) sont terminés et consignés dans `docs/suivi-modifications.md` ; le reste des points 3 et 4 est à planifier.
+Ce document conserve l’ensemble des pistes d’amélioration identifiées dans la revue du projet. Les lots 1 à 10 (correctifs, garde-fous, schémas typés, durcissement HTTP, optimisation du transport, accessibilité/CSP, mesure de concurrence, rétention, observabilité et montée en workers) sont terminés et consignés dans `docs/suivi-modifications.md` ; le reste des points 3 et 4 est à planifier.
 
 ## 1. Correctifs fonctionnels et de fiabilité — terminé
 

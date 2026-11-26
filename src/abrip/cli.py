@@ -420,17 +420,26 @@ def api_serve(
     host: str | None = typer.Option(None),
     port: int | None = typer.Option(None),
     reload: bool = typer.Option(False, help="Rechargement automatique en développement"),
+    workers: int | None = typer.Option(
+        None, min=1, help="Processus uvicorn (défaut : api.workers)"
+    ),
 ) -> None:
     """Démarre le service FastAPI."""
     import uvicorn
 
     settings = get_settings()
+    count = settings.api.workers if workers is None else workers
+    if count < 1:
+        raise typer.BadParameter("--workers doit être au moins 1")
+    if reload and count > 1:
+        raise typer.BadParameter("--reload et --workers>1 sont incompatibles")
     uvicorn.run(
         "abrip.api.main:create_app",
         factory=True,
         host=host or settings.api.host,
         port=port or settings.api.port,
         reload=reload,
+        workers=count,
     )
 
 
