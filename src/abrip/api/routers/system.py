@@ -8,7 +8,17 @@ from fastapi import APIRouter, Depends, Query
 
 from abrip import __version__
 from abrip.api.deps import DataAccess, get_data_access
-from abrip.api.schemas import CollectorInfo, Health, LayerStatus, Overview
+from abrip.api.schemas import (
+    CollectorInfo,
+    CountryCoverage,
+    DataQuality,
+    Health,
+    LayerStatus,
+    Overview,
+    RoaSummary,
+    SilentCollector,
+    SourceFreshness,
+)
 from abrip.config import get_settings
 from abrip.storage.catalog import Catalog
 
@@ -58,6 +68,88 @@ def _time_column(table: str) -> str | None:
         "events": "first_seen",
         "metric_visibility": "snapshot_ts",
     }.get(table)
+
+
+@router.get("/quality", response_model=DataQuality, summary="Fraîcheur et couverture des données")
+def quality(data: DataAccess = Depends(get_data_access)) -> DataQuality:
+    """Qualité des données à partir du catalogue et des référentiels.
+
+    Aucune donnée n'est recalculée ici : le but est d'exposer ce qui est déjà
+    connu (journal d'ingestion, référentiels) pour repérer une source muette ou
+    une couverture manquante avant d'ouvrir l'application.
+    """
+    settings = get_settings()
+    if settings.catalog_path.exists():
+        coverage = Catalog(settings.catalog_path, read_only=True).coverage()
+    else:
+        coverage = {"ingestion": [], "last_run": None}
+
+    today = datetime.now(UTC).date()
+    sources: list[SourceFreshness] = []
+    last_by_collector: dict[str, datetime] = {}
+    for entry in coverage["ingestion"]:
+        newest = entry["to"]
+        oldest = entry["from"]
+        sources.append(
+            SourceFreshness(
+                collector=entry["collector"],
+                file_type=entry["file_type"],
+                files=int(entry["files"]),
+                oldest=oldest,
+                newest=newest,
+                age_days=(today - newest.date()).days if newest else None,
+            )
+        )
+        if newest and (
+            entry["collector"] not in last_by_collector
+            or newest > last_by_collector[entry["collector"]]
+        ):
+            last_by_collector[entry["collector"]] = newest
+
+    countries: list[CountryCoverage] = []
+    if data.exists("ref_asn"):
+        rows = data.query(
+            f"""SELECT country_iso2, count(*) AS total, bool_or(is_african) AS african
+                FROM {data.table("ref_asn")} WHERE country_iso2 IS NOT NULL
+                GROUP BY 1 ORDER BY 2 DESC LIMIT 10"""
+        )
+        countries = [
+            CountryCoverage(
+                country_iso2=str(row["country_iso2"]),
+                asns=int(row["total"]),
+                african=bool(row["african"]),
+            )
+            for row in rows
+        ]
+
+    roas = RoaSummary(roas=0, prefixes=0)
+    if data.exists("ref_roa"):
+        row = data.query(
+            f"SELECT count(*) AS total, count(DISTINCT prefix) AS prefixes FROM {data.table('ref_roa')}"
+        )[0]
+        roas = RoaSummary(roas=int(row["total"]), prefixes=int(row["prefixes"]))
+
+    silent: list[SilentCollector] = []
+    for collector in settings.collectors:
+        newest = last_by_collector.get(collector.name)
+        age = (today - newest.date()).days if newest else None
+        if age is None or age > 2:
+            silent.append(
+                SilentCollector(
+                    name=collector.name,
+                    enabled=collector.enabled,
+                    last_file_ts=newest,
+                    age_days=age,
+                )
+            )
+
+    return DataQuality(
+        generated_at=datetime.now(UTC),
+        sources=sources,
+        countries=countries,
+        roa=roas,
+        silent_collectors=silent,
+    )
 
 
 @router.get("/meta/collectors", response_model=list[CollectorInfo], summary="Collecteurs suivis")

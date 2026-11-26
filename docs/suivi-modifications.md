@@ -256,6 +256,14 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 - [x] `abrip detect run --notify` et `abrip detect alert --days N` ; 6 tests sans réseau (sévérité, déduplication, échec HTTP, absence de webhook, lecture des incidents récents, commande CLI).
 - [x] Compatibilité Windows : les fuseaux horaires des colonnes Parquet sont retirés avant conversion en dictionnaires Python (tzdata absent localement).
 
+## Lot 13 — Tableau de qualité des données — **terminé**
+
+### 13.1 Endpoint et interface — **fait**
+- [x] `GET /api/quality` (`DataQuality`, schémas `SourceFreshness`, `CountryCoverage`, `RoaSummary`, `SilentCollector`) : fraîcheur par source depuis le journal d'ingestion, dix pays les mieux couverts, volume du référentiel RPKI et collecteurs sans archive depuis plus de deux jours.
+- [x] Aucune donnée recalculée : l'endpoint lit le catalogue et les Parquet existants ; installation vierge incluse (listes vides et collecteurs signalés).
+- [x] Page React « Qualité des données » chargée à la demande, ajoutée à la navigation, avec tableaux et états vides. Contrat frontend typé à la main dans `lib/types.ts`.
+- [x] Test : 3 tests API (jeu de démo, journal d'ingestion, installation vierge), schéma OpenAPI vérifié, 14 parcours Playwright (5 accessibilité, 7 smoke, 2 clavier) et budget gzip 253 927 octets sous la limite de 270 000.
+
 ## Vérification finale du lot 1 + 2
 
 | Vérification | Résultat |
@@ -278,7 +286,8 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 | `tests/test_api_workers.py` | 5 tests : option CLI, configuration, incompatibilité `--reload`, refus de `--workers 0` |
 | `tests/test_limite_debit.py` | 6 tests : fenêtre glissante, limite par client, 429, exemption supervision, comptage 429, défaut désactivé |
 | `tests/test_alerting.py` | 6 tests : sévérité, déduplication, échec HTTP, webhook absent, incidents récents, commande CLI |
-| `npm run test:e2e` | 12 parcours Playwright OK (4 accessibilité, 6 smoke, 2 clavier ; dont 1 exécution en mode CI) |
+| `tests/test_qualite_donnees.py` | 3 tests : contrat de `/api/quality`, journal d'ingestion, installation vierge |
+| `npm run test:e2e` | 14 parcours Playwright OK (5 accessibilité, 7 smoke, 2 clavier ; dont 1 exécution en mode CI) |
 | `npm run typecheck` | OK (src, e2e et configurations) |
 | `npm run build` | OK |
 | Budget gzip mesuré | 259 328 octets (plafond relevé à 270 000) |
@@ -316,6 +325,7 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 | 2026-11-26 | Lot 10 — montée en workers | `config.py`, `cli.py`, `tests/test_api_workers.py`, `docs/{deploiement,performances}.md` | `--workers` et `api.workers`, garde-fous CLI ; 5 tests, re-mesure sans gain de débit sur un cœur partagé |
 | 2026-11-26 | Lot 11 — finitions de sécurité | `config.py`, `api/{main,rate_limit}.py`, `tests/test_limite_debit.py`, `e2e/clavier.spec.ts` | 429 avec `Retry-After` et exemption supervision ; 6 tests Python, 2 parcours clavier, 12 parcours au total |
 | 2026-11-26 | Lot 12 — alerting | `config.py`, `alerting.py`, `cli.py`, `storage/catalog.py`, `tests/test_alerting.py`, `docs/deploiement.md` | Webhook Slack, déduplication par incident, `--notify` et `detect alert` ; 6 tests sans réseau |
+| 2026-11-26 | Lot 13 — qualité des données | `api/schemas.py`, `api/routers/system.py`, `pages/Quality.tsx`, `App.tsx`, `Layout.tsx`, `tests/test_qualite_donnees.py` | `/api/quality` typé et page dédiée ; 3 tests API, 14 parcours navigateur |
 
 ## Bilan
 
@@ -331,4 +341,5 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 - **Lot 10 :** terminé : service multi-processus configurable, avec mesure locale montrant l'absence de gain sur un cœur partagé et la limitation des métriques à un worker.
 - **Lot 11 :** terminé : limitation de débit configurable et parcours clavier automatisés ; les points 1, 2 et 4 de la feuille de route sont désormais tous traités.
 - **Lot 12 :** terminé : alertes webhook sur incidents critiques avec déduplication persistée, sans réseau dans les tests.
-- **Points reportés :** boucle de qualification humaine L5, détection sub-horaire, tableau de qualité des données, précalcul des endpoints coûteux.
+- **Lot 13 :** terminé : tableau de qualité des données exposé dans l'API et dans l'interface, sans recalcul.
+- **Points reportés :** boucle de qualification humaine L5, détection sub-horaire et précalcul des endpoints coûteux.

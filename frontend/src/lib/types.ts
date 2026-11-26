@@ -46,6 +46,34 @@ export interface CollectorInfo {
   last_file_ts: string | null;
 }
 
+export interface SourceFreshness {
+  collector: string;
+  file_type: string;
+  files: number;
+  oldest: string | null;
+  newest: string | null;
+  age_days: number | null;
+}
+
+export interface CountryCoverage {
+  country_iso2: string;
+  asns: number;
+  african: boolean;
+}
+
+export interface DataQuality {
+  generated_at: string;
+  sources: SourceFreshness[];
+  countries: CountryCoverage[];
+  roa: { roas: number; prefixes: number };
+  silent_collectors: Array<{
+    name: string;
+    enabled: boolean;
+    last_file_ts: string | null;
+    age_days: number | null;
+  }>;
+}
+
 export interface Overview {
   window_from: string | null;
   window_to: string | null;

@@ -7,6 +7,7 @@ const parcours = [
   ["/asns", "Systèmes autonomes"],
   ["/prefixes", "Préfixes"],
   ["/events", "Événements"],
+  ["/quality", "Qualité des données"],
 ] as const;
 
 for (const [route, titre] of parcours) {

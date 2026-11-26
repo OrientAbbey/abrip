@@ -346,6 +346,11 @@ dans la requête si elle est courte et sans caractère suspect). Le même
 identifiant est ajouté aux logs JSON sous `request_id`, ce qui permet de passer
 d'une alerte à la trace d'une requête.
 
+La page « Qualité des données » de l'interface expose la même information sous
+forme de tableaux : fraîcheur des sources d'ingestion, couverture par pays,
+référentiel RPKI et collecteurs silencieux. L'endpoint correspondant est
+`GET /api/quality`, protégé par la clé API comme le reste de l'API.
+
 ### Alertes sur incidents
 
 Aucune alerte ne part sans configuration explicite. Un webhook au format Slack

@@ -29,6 +29,7 @@ def test_schemas_exposes_dans_openapi(client):
     assert {"PrefixRow", "NeighboursResponse", "RoaHistoryResponse", "PeriodRun"} <= set(schemas)
     assert {"AsnDetail", "PrefixDetail", "EventTimeline"} <= set(schemas)
     assert {"PropagationResponse", "PropagationReplayResponse", "UpstreamsResponse"} <= set(schemas)
+    assert {"DataQuality", "SourceFreshness", "CountryCoverage"} <= set(schemas)
     assert set(schemas["EventFacets"]["properties"]) == {
         "detector",
         "severity",

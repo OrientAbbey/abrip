@@ -63,6 +63,15 @@ test("la liste des préfixes ouvre la fiche d'un préfixe", async ({ page }) => 
   expect(errors).toEqual([]);
 });
 
+test("la page qualité des données charge ses indicateurs", async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.goto("/");
+  await page.getByRole("link", { name: "Qualité des données" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Qualité des données" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Fraîcheur par source" })).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
 test("les métriques et l'identifiant de requête sont exposés", async ({ page }) => {
   const response = await page.request.get("/api/metrics");
   expect(response.status()).toBe(200);

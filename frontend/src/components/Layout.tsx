@@ -9,6 +9,7 @@ const LINKS: Array<[string, string]> = [
   ["/asns", "Systèmes autonomes"],
   ["/prefixes", "Préfixes"],
   ["/countries", "Pays"],
+  ["/quality", "Qualité des données"],
   ["/about", "À propos"],
 ];
 
