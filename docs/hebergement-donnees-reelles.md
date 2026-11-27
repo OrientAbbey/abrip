@@ -2,6 +2,8 @@
 
 Étude menée le 27/11/2026 pour répondre à une contrainte précise : **héberger ABRIP avec de vraies données BGP, sans abonnement payant**, une carte de crédit étant acceptée pour la vérification d'identité. Ce document complète `docs/deploiement.md`, qui décrit surtout le déploiement de la démo et dont la section Hugging Face doit être lue avec la mise à jour ci-dessous.
 
+**Cas sans carte utilisable** : Oracle refusant les cartes virtuelles/prépayées, une étude séparée propose une architecture 100 % gratuite (Render Free + dataset public Hugging Face + pipeline local) dans `docs/deploiement-sans-carte.md`.
+
 ## 1. Besoins réels du projet
 
 | Besoin | Chiffre / contrainte | Conséquence pour l'hébergement |
