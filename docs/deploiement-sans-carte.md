@@ -1,110 +1,117 @@
-# Déploiement sans carte bancaire physique — étude novembre 2026
+# Déploiement 100 % cloud, sans carte bancaire — étude novembre 2026
 
-Contexte : héberger ABRIP avec des données réelles en restant **gratuit**, sachant que le seul moyen de paiement disponible est une **carte virtuelle Orange Money avec 1 000 FCFA**. Oracle Cloud a refusé cette carte (cartes prépayées/virtuelles interdites). Ce document reprend les recherches faites après ce refus et propose une architecture qui ne demande **aucun moyen de paiement**.
+Contexte : héberger ABRIP avec de vraies données BGP, **sans aucun moyen de paiement utilisable** (carte virtuelle de 1 000 FCFA refusée par Oracle) et **sans qu'aucune étape ne passe par la machine de l'utilisateur**. Ce document remplace la version précédente, qui supposait que le pipeline tourne en local.
 
-## 1. Ce qui est définitivement exclu
+## 1. Ce qui est exclu
 
 | Service | Raison |
 |---|---|
-| **Oracle Cloud Always Free** | Carte physique obligatoire pour l'inscription ; refus explicite des cartes prépayées/virtuelles/à usage unique |
-| **Google Cloud / Cloud Run** | Compte de facturation obligatoire ; Google refuse cartes prépayées et virtuelles pour la facturation récurrente |
-| **Koyeb Free** | Pré-autorisation de **29 $** demandée à l'inscription : impossible avec 1 000 FCFA, et le plan Pro est sélectionné par défaut |
-| **Fly.io Free** | La carte est facultative pour le compte, mais nécessaire pour dépasser l'essai de 1 $ / 7 jours ; le $5 mensuel suppose une carte valide et le dépassement bascule en payant |
-| **Hugging Face Spaces compute** | Depuis 2026, créer un Space Docker/Gradio sur `cpu-basic` exige PRO/Team ; seuls les Static Spaces sont gratuits |
-| **PythonAnywhere Free** | Pas de carte, mais 512 Mo de disque, 100 CPU-s/jour, sortie Internet filtrée par liste blanche, web app expirant après 1 mois sans usage |
+| **Oracle Cloud Always Free** | Carte physique obligatoire ; refus explicite des cartes virtuelles/prépayées |
+| **Google Cloud / Cloud Run** | Compte de facturation obligatoire ; cartes virtuelles refusées |
+| **Koyeb Free** | Pré-autorisation de 29 $ à l'inscription |
+| **Fly.io Free** | $5/mois avec carte ; l'essai sans carte se limite à 1 $ / 7 jours et 5 min par machine |
+| **Hugging Face Spaces compute / Jobs** | Spaces Docker/Gradio exigent PRO/Team ; HF Jobs exigent un solde créditeur positif |
+| **PythonAnywhere Free** | 512 Mo de disque, sortie Internet filtrée, 100 CPU-s/jour |
 
-Sources : [Oracle Free Tier FAQ](https://www.oracle.com/cloud/free/faq/), [Google Cloud signup troubleshooting](https://docs.cloud.google.com/support/docs/troubleshoot-signup), [Koyeb Pricing FAQ](https://www.koyeb.com/docs/faqs/pricing), [Fly.io Free Plan](https://docs.fly.io/about/free-plan), [HF Spaces Overview](https://huggingface.co/docs/hub/spaces-overview), [PythonAnywhere Free Accounts](https://help.pythonanywhere.com/pages/FreeAccountsFeatures).
+Sources : [Oracle FAQ](https://www.oracle.com/cloud/free/faq/), [Google signup troubleshooting](https://docs.cloud.google.com/support/docs/troubleshoot-signup), [Koyeb Pricing FAQ](https://www.koyeb.com/docs/faqs/pricing), [Fly.io Free Plan](https://docs.fly.io/about/free-plan), [HF Jobs pricing](https://huggingface.co/docs/hub/en/jobs-pricing), [PythonAnywhere Free](https://help.pythonanywhere.com/pages/FreeAccountsFeatures).
 
-## 2. Ce qui reste possible sans carte
+## 2. Les briques gratuites retenues
 
-| Brique | Service gratuit | Limite | Usage pour ABRIP |
+| Brique | Service | Gratuité | Rôle |
 |---|---|---|---|
-| API | **Render Free web service** | 512 Mo RAM, < 1 CPU, mise en veille après 15 min d'inactivité, redémarrage ~1 min, système de fichiers éphémère | Exécuter `abrip api serve` (l'API seule tient dans 512 Mo) |
-| Données | **Dataset public Hugging Face** | Stockage public « best-effort », **egress et CDN inclus sans coût**, aucun compte payant | Héberger les Parquet curés/analytiques |
-| Frontend | **GitHub Pages / Netlify / Vercel Hobby** | Statique gratuit, pas de carte | Servir `frontend/dist` |
-| Pipeline ETL | **Machine locale** | Aucune limite de service | Télécharger les MRT, curer, calculer, détecter, puis publier vers le dataset HF |
-| Métriques/alertes | Webhook Slack gratuit | — | `ABRIP_ALERTS__WEBHOOK_URL` |
+| Pipeline ETL | **GitHub Actions** (cron) | Minutes gratuites et illimitées sur dépôt public ; 2 000 min/mois sur dépôt privé | Télécharger MRT, curer, calculer, détecter, précalculer |
+| Stockage des données | **Hugging Face Hub** | 100 Go privés ou stockage public « best-effort », egress inclus | Publier les Parquet et le catalogue |
+| API | **Render Free web service** | 512 Mo RAM, mise en veille après 15 min | Exécuter `abrip api serve` |
+| Frontend | GitHub Pages / Vercel / Netlify | Statique gratuit | Servir `frontend/dist` |
+| Réveil du service | GitHub Actions cron + requête HTTP | Gratuit | Éviter la mise en veille si nécessaire |
 
-Sources : [Render Free](https://render.com/docs/free), [HF Storage limits](https://huggingface.co/docs/hub/en/storage-limits), [HF Pricing](https://huggingface.co/pricing), [Vercel Hobby](https://vercel.com/docs/plans/hobby).
+Sources : [GitHub Actions billing](https://docs.github.com/en/actions/concepts/billing-and-usage), [GitHub-hosted runners](https://docs.github.com/en/actions/reference/runners/github-hosted-runners), [HF storage limits](https://huggingface.co/docs/hub/en/storage-limits), [Render Free](https://render.com/docs/free).
 
-## 3. Deux architectures possibles
+### Pourquoi GitHub Actions convient au pipeline
 
-### Variante A — la plus simple : jeu de données léger téléchargé au démarrage
+- Runner Linux public : **4 vCPU / 16 Go de RAM / 14 Go de SSD**, sans limite de minutes facturées.
+- Runner privé : 2 vCPU / 8 Go / 14 Go, avec 2 000 min/mois gratuites.
+- Chaque job peut tourner jusqu'à **6 heures** ; un cron quotidien suffit largement.
+- Le runner a un accès Internet sortant : `abrip ingest broker` peut télécharger les archives MRT directement depuis RouteViews/RIPE RIS.
+- Les secrets (token Hugging Face, clé API, webhook) sont stockés dans **GitHub Secrets**, gratuitement.
+
+Le disque de 14 Go impose de **traiter jour par jour** et de supprimer les MRT bruts après curation de chaque date (pas de rétention de 30 jours sur le runner) : 1–15 Go de téléchargement, puis quelques centaines de Mo de Parquet à publier.
+
+## 3. Architecture retenue
 
 ```
-Machine locale (pipeline, 1–15 Go de MRT téléchargés)
-        │  abrip ingest broker → etl curate → analytics compute → detect run
-        ▼
-Dataset public Hugging Face  (Parquet, quelques Mo à ~100 Mo)
-        │  téléchargement au démarrage du service
-        ▼
-Render Free (FastAPI + frontend intégré)  ──►  https://<app>.onrender.com
+GitHub Actions (cron quotidien, 03:00 UTC)          GitHub Actions (cron /10 min)
+  └─ uv sync --locked                                 └─ curl /api/health (réveil Render)
+  └─ ABRIP_DATA_DIR=$RUNNER_TEMP/data
+  └─ abrip ingest broker --type updates
+  └─ abrip etl curate  (jour par jour, raw supprimé)
+  └─ abrip analytics compute
+  └─ abrip detect run --notify
+  └─ abrip analytics precompute
+  └─ huggingface_hub upload → dataset HF (privé ou public)
+                    │
+                    ▼
+Render Free  ── start.sh ──► télécharge le dataset HF dans ABRIP_DATA_DIR
+             └─ abrip api serve --host 0.0.0.0 --port $PORT
+                    │
+                    ▼
+GitHub Pages / Vercel : frontend statique
 ```
 
-- Aucun changement de code : `DataAccess` continue de lire des fichiers locaux.
-- Un script de démarrage (`render.yaml` + `start.sh`) télécharge le dataset HF dans `ABRIP_DATA_DIR` puis lance `abrip api serve`.
-- Le jeu doit rester **petit** (< 100–150 Mo) : le redémarrage après veille le télécharge à nouveau.
-- Le catalogue DuckDB et les retours L5 ne survivent pas à un redémarrage : acceptable pour un service de consultation, mais `detect label`/alertes doivent rester locaux.
+**Aucune commande ne s'exécute sur ton poste.**
 
-### Variante B — sans téléchargement : DuckDB lit le dataset HF à la demande
+### Variante A — recommandée pour démarrer
 
-DuckDB, avec l'extension `httpfs`, sait lire un Parquet sur HTTPS en **range requests** : il ne télécharge que le pied de fichier et les row groups nécessaires à la requête.
+`start.sh` télécharge le dataset depuis HF avec `huggingface_hub.snapshot_download` (token en variable d'environnement si le dataset est privé), puis lance l'API existante sans modification du code applicatif. Le jeu doit rester léger (< 100–150 Mo) car il est re-téléchargé à chaque réveil du service.
 
-```sql
-INSTALL httpfs;
-SELECT * FROM read_parquet(
-  'https://huggingface.co/datasets/<user>/<repo>/resolve/main/curated/bgp_elements/date=2026-11-20/part-00000.parquet'
-);
-```
+### Variante B — évolution
 
-- Le dataset complet (~673 Mo à 50 M de lignes) reste sur HF ; rien n'est stocké sur Render.
-- Nécessite une adaptation de `DataAccess.table()`/`glob_for()` pour produire des URL HTTPS et charger `httpfs` au démarrage.
-- Le catalogue local reste facultatif : `/api/health` et `/api/quality` savent déjà fonctionner sans catalogue.
-- Cold starts plus rapides, mais chaque requête peut générer un peu de trafic HF ; le cache `ETag`/304 et le cache applicatif limitent ce coût.
-- À valider : acceptance des Range requests par le CDN HF (à tester avec un `curl -I -H "Range: bytes=0-10"` sur un fichier du dataset), taille mémoire de DuckDB + httpfs sous 512 Mo.
+Adapter `DataAccess` pour que DuckDB lise les Parquet du dataset HF en HTTPS avec `httpfs` (range requests) : plus de téléchargement complet au démarrage, mais des changements de code et des tests. Utile si le volume dépasse ~150 Mo. Le token HF peut être transmis comme en-tête HTTP pour un dataset privé, ou le dataset peut rester public.
 
-Sources : [DuckDB HTTP(S) support](https://duckdb.org/docs/1.4/core_extensions/httpfs/https), [DuckDB httpfs overview](https://duckdb.org/docs/archive/0.9.2/extensions/httpfs).
+Sources : [DuckDB HTTP(S)/httpfs](https://duckdb.org/docs/1.4/core_extensions/httpfs/https).
 
-## 4. Workflow de données recommandé
+## 4. Workflow complet
 
-1. **Sur la machine locale** (où la carte n'est pas nécessaire) :
-   ```bash
-   abrip ingest broker --from 2026-11-01 --to 2026-11-07 --type updates
-   abrip etl curate --from 2026-11-01 --to 2026-11-07
-   abrip analytics compute --from 2026-11-01 --to 2026-11-07
-   abrip detect run --from 2026-11-01 --to 2026-11-07
-   abrip analytics precompute
-   ```
-2. **Publier** `data/curated`, `data/analytics` et `data/reference` dans un dataset public HF avec `huggingface_hub` (gratuit, compte gratuit).
-3. **Sur Render** : service `start.sh` qui télécharge (variante A) ou configure `httpfs` (variante B), puis lance l'API.
-4. **Frontend** : `npm run build`, puis publier `frontend/dist` sur GitHub Pages ou Vercel. Si l'API est sur Render et le frontend sur un autre domaine, renseigner `ABRIP_API__CORS_ORIGINS` avec ce domaine — l'API reste protégée par clé si tu la déploies publiquement.
+1. **Workflow GitHub Actions `.github/workflows/pipeline.yml`** : déclenché par `schedule` (cron) et `workflow_dispatch`.
+   - checkout du dépôt, `uv sync --locked`, `ABRIP_DATA_DIR=$RUNNER_TEMP/data` ;
+   - `abrip ingest broker --from … --to … --type updates` avec les collecteurs choisis ;
+   - `abrip etl curate` par jour, puis suppression des fichiers `raw/` du jour ;
+   - `abrip analytics compute`, `abrip detect run --notify`, `abrip analytics precompute` ;
+   - `huggingface_hub.upload_folder` vers `<compte>/abrip-data` avec `HF_TOKEN` ;
+   - `abrip etl purge --days 90 --apply` si un historique plus long est conservé sur le runner (inutile si `data/` est recreated à chaque run).
+2. **Dataset Hugging Face** `<compte>/abrip-data` : privé (100 Go gratuits) avec un token en lecture seule pour Render, ou public si les données peuvent être ouvertes.
+3. **Service Render** : Dockerfile existant, avec une commande de démarrage qui appelle `start.sh` ; variables `ABRIP_DATA_DIR`, `HF_TOKEN`, `ABRIP_API__API_KEY`, `ABRIP_API__RATE_LIMIT_PER_MINUTE`, `ABRIP_LOG_LEVEL`.
+4. **Frontend** : `npm run build` puis publication de `frontend/dist` sur GitHub Pages/Vercel. Si le frontend est sur un autre domaine que l'API, renseigner `ABRIP_API__CORS_ORIGINS`.
+5. **Réveil** : un second workflow GitHub Actions appelle `/api/health` toutes les 10 minutes pour éviter la mise en veille de 15 minutes de Render.
 
-## 5. Limites à accepter
+## 5. Limites acceptées
 
-- **Mise en veille** : 15 min sans trafic, réveil d'environ 1 minute. À mitiger avec un ping périodique gratuit (UptimeRobot, cron GitHub Actions) si tu veux une latence stable.
-- **Pas d'écriture persistante** : pas de `event_feedback`, ni `alert_log`, ni catalogue persistant sur le serveur. LA qualification L5 et les alertes restent exécutées en local.
-- **512 Mo de RAM** : suffisant pour l'API seule, mais pas pour le précalcul (`asn_prefix_stats`) ni la curation — ces étapes restent locales.
-- **Trafic sortant Render** : Render suspend les services gratuits qui génèrent un volume sortant inhabituel. La variante B (range requests HF) est plus économique que la variante A (téléchargement complet à chaque réveil).
-- **Données publiques** : un dataset HF public est visible par tous. Si les données doivent rester privées, le stockage privé HF est payant — il faut alors revenir vers une offre avec carte.
+- **14 Go de disque sur le runner** : traiter par jour et supprimer les MRT après curation ; ne pas activer la rétention brute de 30 jours sur le runner.
+- **6 h par job** : suffisant pour quelques jours de données ; pour un mois, découper en plusieurs exécutions.
+- **Render Free** : 512 Mo, veille après 15 min, système de fichiers éphémère.
+- **Pas d'écritures persistantes côté API** : `event_feedback`, `alert_log` et le catalogue restent sur le runner/Actions ; la qualification L5 est donc à exécuter via le workflow, pas sur le service public.
+- **Dataset privé** : nécessite un token HF côté Render ; sans token, le dataset doit être public.
+- **Tout est dans le cloud** : ton poste ne sert qu'à consulter le résultat.
 
 ## 6. Coût et réseau
 
 | Poste | Coût | Réseau |
 |---|---|---|
-| Render Free | 0 FCFA | Faible (JSON API) |
-| HF dataset public | 0 FCFA, egress inclus | Upload initial depuis chez toi : quelques centaines de Mo ; downloads via CDN HF |
-| Frontend statique | 0 FCFA | ~254 Ko gzip |
-| Pipeline local | 0 FCFA | 1–15 Go de MRT en entrée, selon la fenêtre |
-| Carte bancaire | **aucune utilisée** | — |
+| GitHub Actions | 0 FCFA | 1–15 Go de MRT entrants sur le runner |
+| Hugging Face dataset | 0 FCFA | Upload initial des Parquet ; downloads vers Render |
+| Render Free | 0 FCFA | JSON API (~254 Ko gzip pour le frontend) |
+| Frontend statique | 0 FCFA | — |
+| Carte bancaire | **aucune** | — |
 
 ## 7. Plan d'action proposé
 
-1. Créer les comptes Render, Hugging Face et GitHub Pages **sans carte**.
-2. Créer un jeu de démonstration réel réduit (3 collecteurs, 7 jours, quelques AS concernés) sur la machine locale, puis le publier sur HF.
-3. Déployer une première version sur Render avec la variante A et vérifier `/api/health`, `/api/overview` et les pages du frontend.
-4. Une fois validé, mesurer le trafic au réveil ; si le téléchargement complete devient gênant, passer à la variante B (httpfs).
-5. Garder Oracle Cloud en objectif d'évolution si une carte physique devient disponible : le même dataset HF peut alors être téléchargé une fois sur le volume bloc.
+1. Créer les comptes GitHub, Hugging Face et Render **sans carte**.
+2. Créer le dataset `<compte>/abrip-data` (privé de préférence) et un token HF en lecture/écriture dans les Secrets GitHub, un token en lecture seule dans Render.
+3. Ajouter `.github/workflows/pipeline.yml` et `start.sh` (variante A) au dépôt.
+4. Déployer sur Render et vérifier `/api/health`, `/api/overview` et les parcours du frontend.
+5. Ajouter le workflow de réveil, puis mesurer le trafic HF au réveil ; basculer vers la variante B si le téléchargement devient gênant.
+6. Si une carte physique devient disponible plus tard, migrer vers Oracle Cloud : le dataset HF sert alors d'amorçage du volume bloc.
 
 ## 8. Conclusion
 
-Avec 1 000 FCFA sur une carte virtuelle, **aucune offre d'hébergement avec stockage persistant n'est accessible**. La combinaison **Render Free + dataset public Hugging Face + pipeline local** permet néanmoins de publier l'API et le frontend sur de vraies données, à condition d'accepter la mise en veille, l'absence d'écritures côté serveur et un jeu de données hébergé publiquement. C'est la solution gratuite la plus réaliste ; la variante B la rapproche du comportement d'une installation complète sans télécharger les Parquet à chaque démarrage.
+Le couple **GitHub Actions + Hugging Face + Render Free** permet de faire tourner l'intégralité du cycle de vie dans le cloud, gratuitement et sans carte bancaire, y compris l'ingestion des MRT. Il remplace la machine locale par un runner GitHub planifié, avec un dataset HF comme unique point d'échange entre le pipeline et l'API. C'est la solution la plus proche d'un déploiement réel dans les contraintes actuelles.
