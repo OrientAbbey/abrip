@@ -112,7 +112,18 @@ Sources : [DuckDB HTTP(S)/httpfs](https://duckdb.org/docs/1.4/core_extensions/ht
 5. Ajouter le workflow de réveil, puis mesurer le trafic HF au réveil ; basculer vers la variante B si le téléchargement devient gênant.
 6. Si une carte physique devient disponible plus tard, migrer vers Oracle Cloud : le dataset HF sert alors d'amorçage du volume bloc.
 
-## 8. Fichiers fournis
+## 8. Licence du dataset
+
+ABRIP ne peut pas relicencier librement les données d'origine : **RouteViews** est en CC BY 4.0 (avec conditions commerciales séparées), **RIPE RIS** exige attribution et a des conditions d'usage commercial, **CAIDA AS Relationships** est soumis à un *Acceptable Use Agreement* avec citation obligatoire. Les données AFRINIC/RPKI/IRR/PeeringDB ont leurs propres conditions.
+
+Recommandation :
+
+- garder le dataset **privé** (100 Go gratuits sur HF) si l'objectif est seulement de servir l'API — c'est le cas par défaut dans `run_pipeline.py` ;
+- si le dataset est public, utiliser le tag HF **`license: other`**, jamais `cc0` ou `cc-by` global, et joindre une carte de données qui cite chaque source.
+
+`scripts/deploy/run_pipeline.py` génère automatiquement un `README.md` de dataset avec le tag `license: other`, les attributions RouteViews/RIPE/CAIDA et la précision qu'aucun droit amont n'est transféré. Ce n'est pas un conseil juridique : pour une redistribution publique ou commerciale, vérifier chaque source.
+
+## 9. Fichiers fournis
 
 L'implémentation de la variante B est livrée dans le dépôt :
 
@@ -138,6 +149,6 @@ Le manifeste publié par le pipeline a la forme :
 
 `DataAccess` en mode distant ne consulte aucun fichier local : chaque table exposée devient un `read_parquet([...urls...], union_by_name=true)`. Le mode local reste inchangé et tous les tests existants passent.
 
-## 9. Conclusion
+## 10. Conclusion
 
 Le couple **GitHub Actions + Hugging Face + Render Free** permet de faire tourner l'intégralité du cycle de vie dans le cloud, gratuitement et sans carte bancaire, y compris l'ingestion des MRT. Aucune étape ne passe par la machine de l'utilisateur : le runner GitHub exécute le pipeline, le dataset HF sert de point d'échange et l'API DuckDB lit les Parquet en HTTPS par range requests. C'est la solution la plus proche d'un déploiement réel dans les contraintes actuelles.

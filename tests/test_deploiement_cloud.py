@@ -49,6 +49,15 @@ def test_manifest_cache_les_tables_sans_le_brut(module, tmp_path):
     assert "raw/updates" not in manifeste
 
 
+def test_carte_dataset_attribue_les_sources(module, tmp_path):
+    module.ecrire_carte_dataset(tmp_path)
+    carte = (tmp_path / "README.md").read_text(encoding="utf-8")
+    assert carte.startswith("---\nlicense: other")
+    assert "RouteViews" in carte and "CC BY 4.0" in carte
+    assert "RIPE NCC RIS" in carte and "CAIDA" in carte
+    assert "Acceptable Use Agreement" in carte
+
+
 @pytest.mark.parametrize(
     "fichier",
     [
