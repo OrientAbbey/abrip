@@ -1,5 +1,7 @@
 # Guide de déploiement
 
+> **Mise à jour 2026-11-27 — données réelles.** La section Hugging Face ci-dessous décrit un déploiement de démo. Depuis 2026, créer un Space Docker/Gradio sur `cpu-basic` exige un plan payant (PRO/Team) et le stockage persistant passe par des buckets payants. Pour héberger de vraies données sans abonnement, voir `docs/hebergement-donnees-reelles.md` : l'option recommandée est Oracle Cloud Always Free (2 OCPU / 12 Go / 200 Go de disque / 10 To sortant).
+
 La plateforme se déploie gratuitement et sans modification du code. Trois propriétés le permettent :
 
 - **aucune base de données externe** — les données sont des fichiers Parquet lus par DuckDB ;
