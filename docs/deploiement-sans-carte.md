@@ -112,6 +112,32 @@ Sources : [DuckDB HTTP(S)/httpfs](https://duckdb.org/docs/1.4/core_extensions/ht
 5. Ajouter le workflow de réveil, puis mesurer le trafic HF au réveil ; basculer vers la variante B si le téléchargement devient gênant.
 6. Si une carte physique devient disponible plus tard, migrer vers Oracle Cloud : le dataset HF sert alors d'amorçage du volume bloc.
 
-## 8. Conclusion
+## 8. Fichiers fournis
 
-Le couple **GitHub Actions + Hugging Face + Render Free** permet de faire tourner l'intégralité du cycle de vie dans le cloud, gratuitement et sans carte bancaire, y compris l'ingestion des MRT. Il remplace la machine locale par un runner GitHub planifié, avec un dataset HF comme unique point d'échange entre le pipeline et l'API. C'est la solution la plus proche d'un déploiement réel dans les contraintes actuelles.
+L'implémentation de la variante B est livrée dans le dépôt :
+
+| Fichier | Rôle |
+|---|---|
+| `src/abrip/storage/remote.py` | Chargement du `manifest.json` HTTPS et construction des URLs HF |
+| `src/abrip/api/deps.py` | Mode distant de `DataAccess` : `httpfs`, secret Bearer, `read_parquet([...])` |
+| `scripts/deploy/run_pipeline.py` | Pipeline cloud : ingestion/curation journalières, détection, précalcul, manifeste, publication HF |
+| `scripts/deploy/start.sh` | Commande de démarrage du service sur Render |
+| `.github/workflows/pipeline.yml` | Cron quotidien (7 derniers jours par défaut) du pipeline |
+| `.github/workflows/keep-awake.yml` | Ping `/api/health` toutes les 10 minutes |
+| `render.yaml` | Blueprint Render Free avec variables à synchroniser |
+
+Configuration côté GitHub : Secrets `HF_TOKEN`, `ABRIP_ALERTS__WEBHOOK_URL` (optionnel), `ABRIP_HEALTH_URL` ; Variables `HF_DATASET_REPO` (ex. `moncompte/abrip-data`). Le dataset HF peut rester privé : le token sert alors aussi bien à l'upload qu'à la lecture depuis Render.
+
+Configuration côté Render : renseigner `ABRIP_REMOTE_DATA_URL` (`https://huggingface.co/datasets/<compte>/<repo>/resolve/main`), `ABRIP_REMOTE_DATA_TOKEN` (jeton HF en lecture seule) et `ABRIP_API__API_KEY`. La clé API est indispensable dès que le service est public : la limitation de débit et la protection des métriques en dépendent.
+
+Le manifeste publié par le pipeline a la forme :
+
+```json
+{"tables": {"bgp_elements": ["curated/bgp_elements/date=2026-11-20/part-00000.parquet"]}}
+```
+
+`DataAccess` en mode distant ne consulte aucun fichier local : chaque table exposée devient un `read_parquet([...urls...], union_by_name=true)`. Le mode local reste inchangé et tous les tests existants passent.
+
+## 9. Conclusion
+
+Le couple **GitHub Actions + Hugging Face + Render Free** permet de faire tourner l'intégralité du cycle de vie dans le cloud, gratuitement et sans carte bancaire, y compris l'ingestion des MRT. Aucune étape ne passe par la machine de l'utilisateur : le runner GitHub exécute le pipeline, le dataset HF sert de point d'échange et l'API DuckDB lit les Parquet en HTTPS par range requests. C'est la solution la plus proche d'un déploiement réel dans les contraintes actuelles.

@@ -213,6 +213,10 @@ class Settings(BaseSettings):
     )
 
     data_dir: Path = PROJECT_ROOT / "data"
+    # Mode lecture distante : les Parquet sont lus en HTTPS par DuckDB httpfs,
+    # sans fichiers locaux. Utile pour une API sans disque persistant.
+    remote_data_url: str | None = None
+    remote_data_token: str | None = None
     log_level: str = "INFO"
     # Chemin relatif à data_dir (sauf si absolu). Rotation par taille : au-delà
     # de log_max_bytes, le fichier courant devient .1, jusqu'à log_backup_count.

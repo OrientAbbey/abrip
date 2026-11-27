@@ -1,12 +1,25 @@
-# Déploiement Render — plan gratuit.
-# Render injecte PORT ; le Dockerfile le consomme déjà.
+# Déploiement gratuit du service ABRIP.
+# Les secrets sont à renseigner dans l'interface Render (Sync: false) :
+#   ABRIP_REMOTE_DATA_URL   https://huggingface.co/datasets/<compte>/<repo>/resolve/main
+#   ABRIP_REMOTE_DATA_TOKEN jeton HF en lecture seule (dataset privé)
+#   ABRIP_API__API_KEY      clé API longue et aléatoire
 services:
   - type: web
     name: abrip
     runtime: docker
     plan: free
+    region: frankfurt
     dockerfilePath: ./Dockerfile
+    dockerCommand: /app/scripts/deploy/start.sh
     healthCheckPath: /api/health
     envVars:
+      - key: ABRIP_REMOTE_DATA_URL
+        sync: false
+      - key: ABRIP_REMOTE_DATA_TOKEN
+        sync: false
+      - key: ABRIP_API__API_KEY
+        sync: false
+      - key: ABRIP_API__RATE_LIMIT_PER_MINUTE
+        value: "120"
       - key: ABRIP_LOG_LEVEL
         value: INFO

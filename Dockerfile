@@ -33,6 +33,8 @@ RUN pip install --no-cache-dir uv==0.13.1 \
 ENV PATH="/app/.venv/bin:$PATH"
 
 COPY configs/ ./configs/
+COPY scripts/deploy/start.sh ./scripts/deploy/start.sh
+RUN chmod +x ./scripts/deploy/start.sh
 COPY --from=frontend /build/dist ./frontend/dist
 
 # Le jeu de démonstration est généré à la construction : l'image démarre avec

@@ -1,7 +1,7 @@
 # Bilan général des travaux — ABRIP
 
-Document de synthèse autonome des lots 1 à 16, rédigé après la fusion du lot 16
-(2026-11-26). Il rassemble les décisions, les changements, les vérifications et
+Document de synthèse autonome des lots 1 à 17, mis à jour après le lot 17
+(2026-11-27). Il rassemble les décisions, les changements, les vérifications et
 les réserves éparpillées dans `docs/suivi-modifications.md`,
 `docs/ameliorations-proposees.md`, `docs/performances.md` et
 `docs/limites-et-remediations.md`. Ce dernier reste la source de vérité
@@ -39,6 +39,7 @@ opérationnelle : le présent document ne le remplace pas, il le résume.
 | 14 | Précalcul | #29 | `asn_prefix_stats`, `api.prewarm` | égalité stricte des deux chemins |
 | 15 | Qualification L5 | #30 | verdicts, précision, allowlist | 7 tests dédiés |
 | 16 | Sub-horaire | #31 | `SubHourWithdrawalDetector` opt-in | 4 tests dédiés |
+| 17 | Déploiement cloud | en cours | Lecture Parquet HTTPS + pipeline GitHub Actions | 12 tests dédiés |
 
 ## 3. Détail des lots
 
@@ -336,7 +337,18 @@ Variables d'environnement associées : `ABRIP_ETL__RETENTION_DAYS`,
    plafonnent le débit vers 4 req/s sur la machine de mesure ; la montée en
    workers n'a pas apporté de gain local.
 
-## 9. Chronologie des fusions
+## 9. Lot 17 — déploiement cloud sans carte
+
+Après le refus d'Oracle Cloud d'une carte virtuelle de 1 000 FCFA, et avec la contrainte que **rien ne passe par la machine de l'utilisateur**, le cycle de vie complet a été déplacé dans le cloud :
+
+- `storage/remote.py` charge un `manifest.json` sur un dataset Hugging Face et `DataAccess` lit les Parquet en HTTPS avec DuckDB `httpfs` (range requests), avec un secret Bearer si le dataset est privé ;
+- `scripts/deploy/run_pipeline.py` enchaîne ingestion, curation, analytics, détection et précalcul **dans GitHub Actions**, puis publie Parquet et manifeste sur HF ;
+- `.github/workflows/pipeline.yml`, `keep-awake.yml`, `start.sh` et `render.yaml` fournissent le déploiement Render Free ;
+- le coût est de 0 FCFA et aucune carte bancaire n'est utilisée.
+
+Les détails, les secrets à configurer et les limites (14 Go du runner, veille Render, absence d'écritures persistantes) sont dans `docs/deploiement-sans-carte.md`.
+
+## 10. Chronologie des fusions
 
 ```
 ce0d650  #4   fiabilité, pagination, garde-fous (2026-11-25)
