@@ -1,0 +1,41 @@
+name: Pipeline données
+
+on:
+  schedule:
+    - cron: "0 3 * * *" # chaque jour à 03:00 UTC
+  workflow_dispatch:
+    inputs:
+      from:
+        description: "Premier jour (AAAA-MM-JJ), par défaut 7 jours en arrière"
+        required: false
+      to:
+        description: "Dernier jour (AAAA-MM-JJ), par défaut hier"
+        required: false
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      ABRIP_DATA_DIR: ${{ github.workspace }}/.data
+      ABRIP_LOG_LEVEL: INFO
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v7
+
+      - name: Installer le projet depuis le verrou
+        run: uv sync --locked
+
+      - name: Ingestion, curation, détection et publication
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          ABRIP_ALERTS__WEBHOOK_URL: ${{ secrets.ABRIP_ALERTS__WEBHOOK_URL }}
+          HF_DATASET_REPO: ${{ vars.HF_DATASET_REPO }}
+          INPUT_FROM: ${{ github.event.inputs.from }}
+          INPUT_TO: ${{ github.event.inputs.to }}
+        run: |
+          DEBUT="${INPUT_FROM:-$(date -u -d '7 days ago' +%F)}"
+          FIN="${INPUT_TO:-$(date -u -d '1 day ago' +%F)}"
+          uv run --with huggingface_hub python scripts/deploy/run_pipeline.py \
+            --from "$DEBUT" --to "$FIN" --hf-repo "$HF_DATASET_REPO"

@@ -296,6 +296,15 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 - [x] Test : 4 cas (pic court détecté, absence de retour ignorée, seuil de peers, intégration dans `run_detection`) ; documentation L7 et guide de déploiement mis à jour.
 - [x] **Feuille de route complète** : les 16 lots couvrent tous les points des sections 1 à 4, y compris les deux dernières pistes produit (L5 et granularité).
 
+## Lot 17 — Déploiement cloud sans carte — **terminé**
+
+### 17.1 Lecture distante et pipeline hébergé — **fait**
+- [x] `remote_data_url`/`remote_data_token` dans la configuration et `storage/remote.py` : chargement d'un `manifest.json` HTTPS et construction des URLs du dataset Hugging Face.
+- [x] `DataAccess` en mode distant : `httpfs` chargé par connexion, secret Bearer pour un dataset privé, `read_parquet([...])` sur les URLs du manifeste, `exists()` basé sur le manifeste. Le mode local reste inchangé.
+- [x] `scripts/deploy/run_pipeline.py` exécute le cycle complet dans GitHub Actions (ingestion et curation jour par jour, analytics, détection, précalcul), supprime le brut pour tenir dans 14 Go et publie Parquet + manifeste sur HF.
+- [x] `.github/workflows/pipeline.yml` (cron quotidien, fenêtre par défaut de 7 jours), `.github/workflows/keep-awake.yml` (ping toutes les 10 min), `start.sh`, `render.yaml` et copie du script dans le Dockerfile.
+- [x] Vérification : 12 tests dédiés (manifeste, mode distant, YAML, script) et 74 tests API/contrat/pipeline ciblés OK.
+
 ## Vérification finale du lot 1 + 2
 
 | Vérification | Résultat |
@@ -322,6 +331,7 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 | `tests/test_precalcul.py` | 4 tests : équivalence précalcul/calcul direct, fiche AS avant/après, commande CLI, préchauffage |
 | `tests/test_qualification.py` | 7 tests : verdicts persistés, précision, allowlist YAML, commandes CLI, alerte tue par exemption |
 | `tests/test_detection_subhoraire.py` | 4 tests : pic court, absence de retour, seuil de peers, intégration moteur |
+| `tests/test_donnees_distants.py`, `test_deploiement_cloud.py` | 12 tests : manifeste HTTPS, mode distant, YAML des workflows, script de démarrage |
 | `npm run test:e2e` | 14 parcours Playwright OK (5 accessibilité, 7 smoke, 2 clavier ; dont 1 exécution en mode CI) |
 | `npm run typecheck` | OK (src, e2e et configurations) |
 | `npm run build` | OK |
@@ -364,6 +374,7 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 | 2026-11-26 | Lot 14 — précalcul | `analytics/precompute.py`, `api/{main,deps}.py`, `api/routers/{explore,system}.py`, `cli.py`, `tests/test_precalcul.py` | `asn_prefix_stats`, bascule automatique et `api.prewarm` ; 4 tests dédiés |
 | 2026-11-26 | Lot 15 — qualification L5 | `catalog.py`, `qualification.py`, `configs/allowlist.yaml`, `cli.py`, `alerting.py`, `tests/test_qualification.py` | Verdicts, précision par détecteur et exemptions appliquées aux alertes ; 7 tests dédiés |
 | 2026-11-26 | Lot 16 — détection sub-horaire | `anomaly/subhour.py`, `anomaly/engine.py`, `configs/detection.yaml`, `tests/test_detection_subhoraire.py` | Détecteur 15 min opt-in ; 4 tests dédiés, feuille de route complète |
+| 2026-11-27 | Lot 17 — déploiement cloud | `storage/remote.py`, `api/deps.py`, `scripts/deploy/*`, `.github/workflows/*`, `render.yaml`, `Dockerfile` | Lecture HTTPS sans disque local, pipeline GitHub Actions et publication HF ; 12 tests dédiés |
 
 ## Bilan
 
@@ -383,4 +394,5 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 - **Lot 14 :** terminé : précalcul des préfixes par AS avec bascule automatique et préchauffage optionnel de la vue d'ensemble.
 - **Lot 15 :** terminé : boucle de qualification L5 outillée (verdicts, précision, allowlist) ; le jugement humain reste nécessaire.
 - **Lot 16 :** terminé : détecteur sub-horaire opt-in ; la feuille de route est désormais complète.
+- **Lot 17 :** terminé : déploiement intégralement dans le cloud, sans carte ni machine locale, avec lecture distante des Parquet via DuckDB `httpfs`.
 - **Réserves restantes :** calibrer `subhour_withdrawal` sur de vraies données avant activation, re-mesurer le gain du précalcul à 50 M de lignes, et poursuivre la qualification humaine (tâche organisationnelle).

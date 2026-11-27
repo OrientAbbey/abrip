@@ -23,6 +23,7 @@ from fastapi import Header, HTTPException, status
 
 from abrip.config import Settings, get_settings
 from abrip.logging_conf import get_logger
+from abrip.storage.remote import load_manifest
 
 log = get_logger(__name__)
 
@@ -81,7 +82,7 @@ COMMAND_HINTS: dict[str, str] = {
 class DataAccess:
     """Façade SQL sur les Parquet. Une instance par application."""
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, manifest: dict[str, list[str]] | None = None) -> None:
         self.settings = settings
         self._roots = {
             "curated": settings.curated_dir,
@@ -90,6 +91,17 @@ class DataAccess:
             "raw": settings.raw_dir,
         }
         self._cache: dict[str, tuple[float, Any]] = {}
+        self.remote_base = (
+            settings.remote_data_url.rstrip("/") if settings.remote_data_url else None
+        )
+        self.remote_token = settings.remote_data_token
+        # `manifest` est injectable pour les tests ; en production il est lu une
+        # seule fois au démarrage depuis le dataset HTTPS.
+        self._manifest = (
+            manifest
+            if manifest is not None
+            else (load_manifest(self.remote_base, self.remote_token) if self.remote_base else None)
+        )
         # Une connexion DuckDB par thread : les endpoints synchrones tournent
         # dans le pool de threads de FastAPI et une connexion DuckDB ne doit pas
         # être partagée entre threads. La réutiliser évite de reconstruire le
@@ -107,6 +119,8 @@ class DataAccess:
         return str(self._roots[root_name] / pattern)
 
     def exists(self, table: str) -> bool:
+        if self.remote_base is not None:
+            return bool(self._manifest and self._manifest.get(table))
         root_name, pattern = TABLES[table]
         base = self._roots[root_name] / pattern.split("/")[0]
         return base.exists() and any(base.rglob("*.parquet"))
@@ -121,6 +135,14 @@ class DataAccess:
         con = getattr(self._local, "con", None)
         if con is None:
             con = duckdb.connect(database=":memory:")
+            if self.remote_base is not None:
+                con.execute("INSTALL httpfs")
+                con.execute("LOAD httpfs")
+                if self.remote_token:
+                    token = self.remote_token.replace("'", "''")
+                    con.execute(
+                        f"CREATE SECRET abrip_http_auth (TYPE http, BEARER_TOKEN '{token}')"
+                    )
             self._local.con = con
         return con
 
@@ -135,6 +157,12 @@ class DataAccess:
 
     def table(self, name: str) -> str:
         """Retourne une expression SQL lisible pour une table exposée."""
+        if self.remote_base is not None:
+            if not self.exists(name):
+                raise DataUnavailable(name, COMMAND_HINTS.get(name, "abrip etl curate"))
+            paths = self._manifest[name]  # type: ignore[index]
+            sources = ", ".join(f"'{path}'" for path in paths)
+            return f"read_parquet([{sources}], union_by_name=true)"
         return f"read_parquet('{self.require(name)}', union_by_name=true)"
 
     def optional_table(self, name: str) -> str | None:
