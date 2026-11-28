@@ -77,3 +77,21 @@ def test_start_script_execute_l_api():
     contenu = (RACINE / "scripts" / "deploy" / "start.sh").read_text(encoding="utf-8")
     assert contenu.startswith("#!/bin/sh")
     assert "abrip api serve --host 0.0.0.0" in contenu
+
+
+def test_workflow_installe_le_parseur_et_ingere_les_rib():
+    workflow = (RACINE / ".github" / "workflows" / "pipeline.yml").read_text(encoding="utf-8")
+    script = SCRIPT.read_text(encoding="utf-8")
+    assert "uv sync --locked --extra bgpkit" in workflow
+    assert '"rib"' in script
+    assert "rib_snapshots" in script
+
+
+def test_auto_ne_retombe_pas_sur_le_synthetique(monkeypatch):
+    from abrip.etl import mrt_parser
+
+    for name in ("bgpkit", "mrtparse"):
+        monkeypatch.setattr(mrt_parser._IMPLEMENTATIONS[name], "available", lambda self: False)
+    with pytest.raises(RuntimeError, match="bgpkit"):
+        mrt_parser.get_parser("auto")
+    assert isinstance(mrt_parser.get_parser("synthetic"), mrt_parser.SyntheticParser)

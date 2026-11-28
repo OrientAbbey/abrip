@@ -195,13 +195,19 @@ def get_parser(name: str = "auto") -> MRTParser:
             )
         return parser
 
-    for candidate in _PREFERENCE:
+    # Le parseur synthétique ne doit jamais être choisi par `auto` sur de vraies
+    # archives : il générerait des données factices et laisserait croire que
+    # l'ingestion a réussi. Il reste disponible uniquement sur demande explicite.
+    for candidate in _PREFERENCE[:-1]:
         parser = _IMPLEMENTATIONS[candidate]()
         if parser.available():
             if candidate != _PREFERENCE[0]:
                 log.warning("repli de parseur", extra={"parser": candidate})
             return parser
-    raise RuntimeError("Aucun parseur MRT disponible.")
+    raise RuntimeError(
+        "Aucun parseur MRT réel disponible. Installer l'extra bgpkit "
+        "(uv sync --extra bgpkit) ou mrtparse (uv sync --extra mrt)."
+    )
 
 
 # --- utilitaires mrtparse -------------------------------------------------

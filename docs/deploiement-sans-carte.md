@@ -123,7 +123,76 @@ Recommandation :
 
 `scripts/deploy/run_pipeline.py` génère automatiquement un `README.md` de dataset avec le tag `license: other`, les attributions RouteViews/RIPE/CAIDA et la précision qu'aucun droit amont n'est transféré. Ce n'est pas un conseil juridique : pour une redistribution publique ou commerciale, vérifier chaque source.
 
-## 9. Fichiers fournis
+## 9. Pour déployer concrètement
+
+Aucune commande de cette procédure ne s'exécute sur ta machine : tout se passe dans les interfaces web de GitHub, Hugging Face et Render.
+
+### 9.1 Hugging Face (5 min)
+
+1. Crée un compte gratuit sur `huggingface.co`.
+2. Crée un **dataset** privé, par exemple `toncompte/abrip-data` (*New → Datasets → Create a new dataset* → *Private*).
+3. Crée un token d'accès : *Settings → Access tokens → New token*, avec au moins le droit `write`. Copie-le ; il sert dans les deux étapes suivantes.
+
+### 9.2 GitHub (5 min)
+
+Dans le dépôt ABRIP : *Settings → Secrets and variables → Actions*.
+
+| Type | Nom | Valeur |
+|---|---|---|
+| Secret | `HF_TOKEN` | le token HF créé above |
+| Secret | `ABRIP_HEALTH_URL` | `https://<ton-service>.onrender.com/api/health` (à renseigner après l'étape 9.3) |
+| Secret | `ABRIP_ALERTS__WEBHOOK_URL` | webhook Slack, optionnel |
+| Variable | `HF_DATASET_REPO` | `toncompte/abrip-data` |
+
+Le workflow `pipeline.yml` accepte aussi deux entrées manuelles `from` et `to` au format `AAAA-MM-JJ`. Sans entrée, il traite les 7 derniers jours en incluant hier.
+
+### 9.3 Render (5 min)
+
+1. Crée un compte gratuit sur `render.com` (aucune carte nécessaire).
+2. *New → Blueprint*, connecte ton dépôt GitHub : `render.yaml` est détecté automatiquement.
+3. Renseigne les trois variables marquées `sync: false` :
+
+| Variable | Valeur |
+|---|---|
+| `ABRIP_REMOTE_DATA_URL` | `https://huggingface.co/datasets/toncompte/abrip-data/resolve/main` |
+| `ABRIP_REMOTE_DATA_TOKEN` | le token HF (idéalement un second token en lecture seule) |
+| `ABRIP_API__API_KEY` | une chaîne longue et aléatoire, par exemple générée avec `openssl rand -hex 32` sur n'importe quel service en ligne |
+
+4. Déploie, puis copie l'URL publique du service. Retourne sur GitHub pour renseigner le secret `ABRIP_HEALTH_URL` avec cette URL + `/api/health`.
+
+`ABRIP_API__RATE_LIMIT_PER_MINUTE=120` et `ABRIP_LOG_LEVEL=INFO` sont déjà positionnés par le blueprint.
+
+### 9.4 Premier remplissage du dataset
+
+1. GitHub → onglet **Actions** → workflow **Pipeline données** → **Run workflow**. Laisse les dates vides pour les 7 derniers jours, ou saisis une plage.
+2. Suis les logs du job. Le workflow installe désormais l'extra `bgpkit` (`uv sync --locked --extra bgpkit`), télécharge les `updates` **et** les `rib`, cure jour par jour, calcule les métriques, exécute la détection et le précalcul, puis publie sur HF.
+3. Dans le dataset HF, vérifie la présence de `manifest.json`, `README.md`, et des dossiers `curated/`, `analytics/`, `reference/`.
+
+### 9.5 Vérification
+
+Depuis ton navigateur ou n'importe quel service en ligne :
+
+```text
+https://<ton-service>.onrender.com/api/health
+https://<ton-service>.onrender.com/api/overview?window=7d
+https://<ton-service>.onrender.com/
+```
+
+La réponse de `/api/health` doit lister `bgp_elements`, `metric_*` et `events` avec `"present": true`. Si `ABRIP_API__API_KEY` est renseigné, ajoute l'en-tête `X-API-Key` pour les endpoints `/api/*` ; le frontend lit la clé depuis son propre stockage local.
+
+### 9.6 Diagnostic des erreurs fréquentes
+
+| Symptôme dans les logs | Cause | Correction |
+|---|---|---|
+| `repli de parseur` | Le parseur rapide `bgpkit` n'était pas installé ; le code tombait sur le parseur synthétique | Le workflow installe maintenant `--extra bgpkit`. Si le message persiste, vérifier l'étape d'installation. |
+| `Aucune partition dans .../rib_snapshots` | Seules les `updates` étaient ingestées | Le workflow ingère désormais aussi le type `rib` ; le script échoue explicitement plus tôt si aucune partition RIB n'est produite. |
+| `HF_TOKEN doit être défini` | Secret GitHub absent | Ajouter le secret `HF_TOKEN` dans GitHub. |
+| `401 unauthorized` sur Render | Clé API configurée sans en-tête | Ajouter `X-API-Key` à la requête. |
+| `/api/health` en `degraded` | Dataset pas encore publié ou `manifest.json` absent | Relancer le pipeline puis vérifier le dataset HF. |
+
+⚠️ La CI valide le code et l'image Docker, mais pas l'intégration réelle avec tes comptes : le premier **Run workflow** est le véritable test. En cas d'échec, les logs du workflow contiennent la cause exacte.
+
+## 10. Fichiers fournis
 
 L'implémentation de la variante B est livrée dans le dépôt :
 
@@ -149,6 +218,6 @@ Le manifeste publié par le pipeline a la forme :
 
 `DataAccess` en mode distant ne consulte aucun fichier local : chaque table exposée devient un `read_parquet([...urls...], union_by_name=true)`. Le mode local reste inchangé et tous les tests existants passent.
 
-## 10. Conclusion
+## 11. Conclusion
 
 Le couple **GitHub Actions + Hugging Face + Render Free** permet de faire tourner l'intégralité du cycle de vie dans le cloud, gratuitement et sans carte bancaire, y compris l'ingestion des MRT. Aucune étape ne passe par la machine de l'utilisateur : le runner GitHub exécute le pipeline, le dataset HF sert de point d'échange et l'API DuckDB lit les Parquet en HTTPS par range requests. C'est la solution la plus proche d'un déploiement réel dans les contraintes actuelles.

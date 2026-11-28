@@ -117,8 +117,25 @@ def main() -> None:
 
     for jour in jours(start, end):
         jour_str = jour.isoformat()
-        run("ingest", "broker", "--from", jour_str, "--to", jour_str, *collecteurs)
+        # Updates ET RIB : analytics compute a besoin des snapshots RIB.
+        for file_type in ("updates", "rib"):
+            run(
+                "ingest",
+                "broker",
+                "--from",
+                jour_str,
+                "--to",
+                jour_str,
+                "--type",
+                file_type,
+                *collecteurs,
+            )
         run("etl", "curate", "--from", jour_str, "--to", jour_str)
+        if not any((data_dir / "curated" / "rib_snapshots").glob("date=*/*.parquet")):
+            raise SystemExit(
+                f"Aucune partition rib_snapshots pour {jour_str} : vérifier l'ingestion RIB "
+                "et le parseur MRT (l'extra bgpkit doit être installé)."
+            )
         run("analytics", "compute", "--from", jour_str, "--to", jour_str)
         run("detect", "run", "--from", jour_str, "--to", jour_str, *notifier)
         # Le runner n'a que 14 Go : on ne garde pas les MRT du jour curé.
