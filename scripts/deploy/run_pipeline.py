@@ -48,38 +48,10 @@ def ecrire_manifest(data_dir: Path) -> dict[str, list[str]]:
     return tables
 
 
-def ecrire_carte_dataset(data_dir: Path) -> None:
-    """Décrit la provenance : on ne peut pas relicencier les sources amont."""
-    carte = """---
-license: other
----
-# ABRIP — données BGP dérivées
-
-Jeu généré automatiquement par le pipeline ABRIP. Ce n'est pas une source
-primaire : les conditions des sources d'origine s'appliquent.
-
-## Sources et attribution
-
-- **RouteViews** (University of Oregon) — données MRT sous **CC BY 4.0**.
-  « This dataset utilizes data provided by RouteViews (www.routeviews.org).
-  Use of this data is subject to the CC BY 4.0 license. » DOI : 10.7264/1y7v-2d90.
-- **RIPE NCC RIS** — « The RIPE Routing Information Service (RIS) is a RIPE NCC
-  service. » https://www.ripe.net/ris — conditions d'usage commercial décrites
-  par le RIPE NCC.
-- **CAIDA AS Relationships Dataset** — « The CAIDA AS Relationships Dataset,
-  période utilisée, https://www.caida.org/catalog/datasets/as-relationships/ ».
-  Usage régi par le CAIDA Acceptable Use Agreement ; redistribution à vérifier.
-- **AFRINIC et autres RIR** (délégations), **RPKI**, **IRR**, **PeeringDB** et
-  **bgp.tools** — selon les conditions propres à chaque source.
-
-## Licence
-
-Le tag `other` indique qu'ABRIP ne transmet aucun droit sur les données amont.
-Toute redistribution doit respecter les conditions de chaque source. Les
-fichiers calculés par ABRIP (métriques, événements, incidents, précalcul) sont
-fournis sans garantie, pour la démonstration et la recherche.
-"""
-    (data_dir / "README.md").write_text(carte, encoding="utf-8")
+try:
+    from scripts.deploy.dataset_card import ecrire_carte_dataset
+except ModuleNotFoundError:  # exécution directe : scripts/deploy est dans sys.path
+    from dataset_card import ecrire_carte_dataset
 
 
 def publier(data_dir: Path, repo_id: str, token: str, prive: bool) -> None:
@@ -102,6 +74,11 @@ def main() -> None:
     parser.add_argument("--collectors")
     parser.add_argument("--hf-repo", required=True)
     parser.add_argument("--public", action="store_true", help="dataset public au lieu de privé")
+    parser.add_argument(
+        "--no-manifest",
+        action="store_true",
+        help="ne pas écrire manifest.json/README : un job final s'en charge (matrix journalière)",
+    )
     args = parser.parse_args()
 
     token = os.environ.get("HF_TOKEN")
@@ -144,19 +121,19 @@ def main() -> None:
 
     run("analytics", "precompute")
 
-    tables = ecrire_manifest(data_dir)
-    ecrire_carte_dataset(data_dir)
+    tables: dict[str, list[str]] = {}
+    if not args.no_manifest:
+        tables = ecrire_manifest(data_dir)
+        ecrire_carte_dataset(data_dir)
     publier(data_dir, args.hf_repo, token, prive=not args.public)
-    print(
-        json.dumps(
-            {
-                "days": (end - start).days + 1,
-                "tables": {name: len(paths) for name, paths in tables.items()},
-                "repository": args.hf_repo,
-            },
-            indent=2,
-        )
-    )
+    bilan = {
+        "days": (end - start).days + 1,
+        "repository": args.hf_repo,
+        "manifest": not args.no_manifest,
+    }
+    if tables:
+        bilan["tables"] = {name: len(paths) for name, paths in tables.items()}
+    print(json.dumps(bilan, indent=2))
 
 
 if __name__ == "__main__":

@@ -307,6 +307,18 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 - [x] Correctif après le premier run réel (28/11) : `auto` ne retombe plus silencieusement sur le parseur synthétique ; le workflow installe l'extra `bgpkit` et ingère aussi les RIB, dont dépend `compute_visibility`. Procédure complète de déploiement et diagnostic des erreurs ajoutés dans `docs/deploiement-sans-carte.md` (section 9).
 - [x] Correctif API `pybgpkit-parser` 0.24 : `Parser` est itérable et les champs sont lus via `elem.to_dict()`, plus de `parse_iter()`. Clé API générée par Render (`generateValue`) et fenêtre par défaut configurable (`PIPELINE_DAYS`, 7 jours jusqu'à hier).
 
+## Lot 18 — Optimisation et fiabilité du pipeline cloud — **terminé**
+
+### 18.1 Analyse et décisions — **fait**
+- [x] `docs/analyse-optimisation-pipeline.md` : diagnostic de l'OOM du run `46091918817`, comparatif DuckDB (nouveau tri 1.4+, réglages `threads`, `memory_limit`, `max_temp_directory_size`) et Polars 2.x OOC, limites réelles GitHub Actions (2 000 min/mois sur dépôt privé, gratuit sur public, 20 jobs concurrents, 6 h/job, matrix 256), et évaluation de BGPStream **écarté** (paquet de 2020, dépendance système C).
+- [x] Décision : désactiver le tri dans le cloud et le rendre configurable (`sort_threads`, `sort_max_temp_size`) pour une réactivation après benchmark.
+
+### 18.2 Parallélisation et garde-fous — **fait**
+- [x] `pipeline.yml` : job `dates` calculant la fenêtre, job `pipeline` en matrix **1 jour par job** (4 en parallèle), job `finalize` générant le manifeste et la carte de données ; `ABRIP_ETL__SORT_PARTITIONS=false`.
+- [x] `scripts/deploy/run_pipeline.py` : option `--no-manifest` pour les jobs journaliers ; `finalize_dataset.py` construit le manifeste depuis les fichiers distants sans rien télécharger.
+- [x] `.github/workflows/parsers.yml` + `tests/test_parseurs_optionnels.py` : job dédié avec `--all-extras` et un vrai fichier MRT public, testé localement sur `bgpkit` et `mrtparse` (2 tests réussis).
+- [x] Vérification : 19 tests dédiés, 40 tests de tri/précalcul/détection/qualification, ruff et mypy OK.
+
 ## Vérification finale du lot 1 + 2
 
 | Vérification | Résultat |
@@ -334,6 +346,7 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 | `tests/test_qualification.py` | 7 tests : verdicts persistés, précision, allowlist YAML, commandes CLI, alerte tue par exemption |
 | `tests/test_detection_subhoraire.py` | 4 tests : pic court, absence de retour, seuil de peers, intégration moteur |
 | `tests/test_donnees_distants.py`, `test_deploiement_cloud.py` | 12 tests : manifeste HTTPS, mode distant, YAML des workflows, script de démarrage |
+| `tests/test_parseurs_optionnels.py`, `test_parseur_bgpkit.py` | 3 tests : API bgpkit 0.24 et parseurs réels optionnels |
 | `npm run test:e2e` | 14 parcours Playwright OK (5 accessibilité, 7 smoke, 2 clavier ; dont 1 exécution en mode CI) |
 | `npm run typecheck` | OK (src, e2e et configurations) |
 | `npm run build` | OK |
@@ -377,6 +390,7 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 | 2026-11-26 | Lot 15 — qualification L5 | `catalog.py`, `qualification.py`, `configs/allowlist.yaml`, `cli.py`, `alerting.py`, `tests/test_qualification.py` | Verdicts, précision par détecteur et exemptions appliquées aux alertes ; 7 tests dédiés |
 | 2026-11-26 | Lot 16 — détection sub-horaire | `anomaly/subhour.py`, `anomaly/engine.py`, `configs/detection.yaml`, `tests/test_detection_subhoraire.py` | Détecteur 15 min opt-in ; 4 tests dédiés, feuille de route complète |
 | 2026-11-27 | Lot 17 — déploiement cloud | `storage/remote.py`, `api/deps.py`, `scripts/deploy/*`, `.github/workflows/*`, `render.yaml`, `Dockerfile` | Lecture HTTPS sans disque local, pipeline GitHub Actions et publication HF ; 12 tests dédiés |
+| 2026-11-28 | Lot 18 — optimisation pipeline | `analyse-optimisation-pipeline.md`, `storage/parquet.py`, `scripts/deploy/*`, `.github/workflows/{pipeline,parsers}.yml` | Tri désactivé dans le cloud, matrix 1 jour/job, job parseurs --all-extras ; 19 tests dédiés |
 
 ## Bilan
 
@@ -397,4 +411,5 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 - **Lot 15 :** terminé : boucle de qualification L5 outillée (verdicts, précision, allowlist) ; le jugement humain reste nécessaire.
 - **Lot 16 :** terminé : détecteur sub-horaire opt-in ; la feuille de route est désormais complète.
 - **Lot 17 :** terminé : déploiement intégralement dans le cloud, sans carte ni machine locale, avec lecture distante des Parquet via DuckDB `httpfs`.
-- **Réserves restantes :** calibrer `subhour_withdrawal` sur de vraies données avant activation, re-mesurer le gain du précalcul à 50 M de lignes, et poursuivre la qualification humaine (tâche organisationnelle).
+- **Lot 18 :** terminé : pipeline parallélisé par jour, tri cloud désactivé, test CI des parseurs sur un vrai MRT ; BGPStream écarté.
+- **Réserves restantes :** calibrer `subhour_withdrawal` sur de vraies données, réactiver le tri après benchmark ou corriger les endpoints « fiche préfixe » directs, re-mesurer le précalcul à 50 M de lignes, et poursuivre la qualification humaine (tâche organisationnelle).

@@ -132,6 +132,8 @@ def curate_day(
                     row_group_size=settings.etl.row_group_size,
                     memory_limit=settings.etl.sort_memory_limit,
                     compression=settings.etl.compression,
+                    threads=settings.etl.sort_threads,
+                    max_temp_size=settings.etl.sort_max_temp_size,
                 )
             size = sum(f.stat().st_size for f in target.glob("*.parquet"))
             catalog.register_partition(
@@ -259,6 +261,8 @@ def curate_ris_live_window(
                     row_group_size=settings.etl.row_group_size,
                     memory_limit=settings.etl.sort_memory_limit,
                     compression=settings.etl.compression,
+                    threads=settings.etl.sort_threads,
+                    max_temp_size=settings.etl.sort_max_temp_size,
                 )
             size = sum(f.stat().st_size for f in target.glob("*.parquet"))
             catalog.register_partition(
@@ -314,6 +318,8 @@ def compact_bgp_elements(settings: Settings) -> dict[str, int]:
             row_group_size=settings.etl.row_group_size,
             memory_limit=settings.etl.sort_memory_limit,
             compression=settings.etl.compression,
+            threads=settings.etl.sort_threads,
+            max_temp_size=settings.etl.sort_max_temp_size,
         )
         if rows:
             totals["partitions"] += 1
