@@ -24,8 +24,8 @@ jobs:
 
       - uses: astral-sh/setup-uv@v7
 
-      - name: Installer le projet depuis le verrou
-        run: uv sync --locked
+      - name: Installer le projet et le parseur MRT rapide
+        run: uv sync --locked --extra bgpkit
 
       - name: Ingestion, curation, détection et publication
         env:
