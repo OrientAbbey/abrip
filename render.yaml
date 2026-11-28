@@ -2,7 +2,7 @@
 # Les secrets sont à renseigner dans l'interface Render (Sync: false) :
 #   ABRIP_REMOTE_DATA_URL   https://huggingface.co/datasets/<compte>/<repo>/resolve/main
 #   ABRIP_REMOTE_DATA_TOKEN jeton HF en lecture seule (dataset privé)
-#   ABRIP_API__API_KEY      clé API longue et aléatoire
+# ABRIP_API__API_KEY est généré automatiquement par Render (base64 256 bits).
 services:
   - type: web
     name: abrip
@@ -18,7 +18,7 @@ services:
       - key: ABRIP_REMOTE_DATA_TOKEN
         sync: false
       - key: ABRIP_API__API_KEY
-        sync: false
+        generateValue: true
       - key: ABRIP_API__RATE_LIMIT_PER_MINUTE
         value: "120"
       - key: ABRIP_LOG_LEVEL
