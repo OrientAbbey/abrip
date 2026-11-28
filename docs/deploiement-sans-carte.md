@@ -40,22 +40,24 @@ Le disque de 14 Go impose de **traiter jour par jour** et de supprimer les MRT b
 ## 3. Architecture retenue
 
 ```
-GitHub Actions (cron quotidien, 03:00 UTC)          GitHub Actions (cron /10 min)
-  └─ uv sync --locked                                 └─ curl /api/health (réveil Render)
-  └─ ABRIP_DATA_DIR=$RUNNER_TEMP/data
-  └─ abrip ingest broker --type updates
-  └─ abrip etl curate  (jour par jour, raw supprimé)
-  └─ abrip analytics compute
-  └─ abrip detect run --notify
-  └─ abrip analytics precompute
-  └─ huggingface_hub upload → dataset HF (privé ou public)
+GitHub Actions (cron quotidien, 03:00 UTC)
+  ├─ job dates : calcule la liste des jours (JSON)
+  ├─ job pipeline (matrix, 1 jour par job, max 4 en parallèle)
+  │    ├─ uv sync --locked --extra bgpkit
+  │    ├─ ABRIP_ETL__SORT_PARTITIONS=false
+  │    ├─ ingest updates + rib → curate → analytics → detect → precompute
+  │    └─ upload des Parquet du jour vers le dataset HF
+  └─ job finalize : manifest.json + README.md (carte de licence)
                     │
                     ▼
-Render Free  ── start.sh ──► télécharge le dataset HF dans ABRIP_DATA_DIR
+Render Free  ── DuckDB httpfs lit les Parquet HF en HTTPS
              └─ abrip api serve --host 0.0.0.0 --port $PORT
                     │
                     ▼
 GitHub Pages / Vercel : frontend statique
+
+GitHub Actions (cron /10 min) : curl /api/health (réveil Render)
+GitHub Actions (parseurs) : --all-extras + vrai fichier MRT
 ```
 
 **Aucune commande ne s'exécute sur ton poste.**
@@ -181,7 +183,7 @@ Si tu lances manuellement le workflow, les champs `from` et `to` sont facultatif
 ### 9.4 Premier remplissage du dataset
 
 1. GitHub → onglet **Actions** → workflow **Pipeline données** → **Run workflow**. Laisse les dates vides pour les 7 derniers jours, ou saisis une plage.
-2. Suis les logs du job. Le workflow installe désormais l'extra `bgpkit` (`uv sync --locked --extra bgpkit`), télécharge les `updates` **et** les `rib`, cure jour par jour, calcule les métriques, exécute la détection et le précalcul, puis publie sur HF.
+2. Suis les logs : le job `dates` calcule les jours, puis le job `pipeline` traite **un jour par job** (matrix, 4 en parallèle maximum). Chaque job installe `--extra bgpkit`, télécharge les `updates` **et** les `rib`, cure, calcule les métriques, exécute la détection et le précalcul, puis publie ses Parquet sur HF. Le tri des partitions est désactivé (`ABRIP_ETL__SORT_PARTITIONS=false`) pour éviter l'OOM observé sur de vraies données. Le job `finalize` génère ensuite `manifest.json` et la carte de données.
 3. Dans le dataset HF, vérifie la présence de `manifest.json`, `README.md`, et des dossiers `curated/`, `analytics/`, `reference/`.
 
 ### 9.5 Vérification
@@ -202,6 +204,8 @@ La réponse de `/api/health` doit lister `bgp_elements`, `metric_*` et `events` 
 |---|---|---|
 | `repli de parseur` | Le parseur rapide `bgpkit` n'était pas installé ; le code tombait sur le parseur synthétique | Le workflow installe maintenant `--extra bgpkit`. Si le message persiste, vérifier l'étape d'installation. |
 | `'Parser' object has no attribute 'parse_iter'` | API de `pybgpkit-parser` 0.24 : `Parser` est itérable et les champs passent par `elem.to_dict()` | Corrigé dans `mrt_parser.py` ; relancer le workflow après mise à jour du dépôt. |
+| `OutOfMemoryException ... max_temp_directory_size` | Tri DuckDB débordé sur le disque temporaire | `ABRIP_ETL__SORT_PARTITIONS=false` dans le workflow. Voir `docs/analyse-optimisation-pipeline.md`. |
+| `Aucune partition rib_snapshots` | Seules les `updates` étaient téléchargées | Le pipeline ingère désormais aussi le type `rib`. |
 | `Aucune partition dans .../rib_snapshots` | Seules les `updates` étaient ingestées | Le workflow ingère désormais aussi le type `rib` ; le script échoue explicitement plus tôt si aucune partition RIB n'est produite. |
 | `HF_TOKEN doit être défini` | Secret GitHub absent | Ajouter le secret `HF_TOKEN` dans GitHub. |
 | `401 unauthorized` sur Render | Clé API configurée sans en-tête | Ajouter `X-API-Key` à la requête. |
@@ -219,7 +223,8 @@ L'implémentation de la variante B est livrée dans le dépôt :
 | `src/abrip/api/deps.py` | Mode distant de `DataAccess` : `httpfs`, secret Bearer, `read_parquet([...])` |
 | `scripts/deploy/run_pipeline.py` | Pipeline cloud : ingestion/curation journalières, détection, précalcul, manifeste, publication HF |
 | `scripts/deploy/start.sh` | Commande de démarrage du service sur Render |
-| `.github/workflows/pipeline.yml` | Cron quotidien (7 derniers jours par défaut) du pipeline |
+| `.github/workflows/pipeline.yml` | Cron quotidien, matrix 1 jour/job + job de finalisation |
+| `.github/workflows/parsers.yml` | Test hebdomadaire des parseurs optionnels sur un vrai MRT |
 | `.github/workflows/keep-awake.yml` | Ping `/api/health` toutes les 10 minutes |
 | `render.yaml` | Blueprint Render Free avec variables à synchroniser |
 

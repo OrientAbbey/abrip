@@ -184,6 +184,8 @@ def sort_partition(
     row_group_size: int = 100_000,
     memory_limit: str = "1GB",
     compression: str = "zstd",
+    threads: int = 1,
+    max_temp_size: str | None = None,
 ) -> int:
     """Réécrit une partition en un seul fichier trié, et renvoie son nombre de lignes.
 
@@ -214,7 +216,13 @@ def sort_partition(
     try:
         con.execute("SET memory_limit = ?", [memory_limit])
         con.execute("SET temp_directory = ?", [str(spill)])
-        con.execute("SET threads = 1")  # un portable n'a pas de cœurs à perdre ; moins de mémoire
+        # Le nouveau tri de DuckDB (1.4+) est plus rapide avec plusieurs
+        # threads ; la valeur par défaut reste 1 pour les portables.
+        con.execute(f"SET threads = {max(1, int(threads))}")
+        con.execute("SET preserve_insertion_order = false")
+        if max_temp_size:
+            safe_size = max_temp_size.replace("'", "''")
+            con.execute(f"SET max_temp_directory_size = '{safe_size}'")
         order = ", ".join(f'"{column}"' for column in by)
         source = ", ".join(f"'{f.as_posix()}'" for f in fragments)
         con.execute(

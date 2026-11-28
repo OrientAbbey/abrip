@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import sys
 from datetime import date
 from pathlib import Path
 
@@ -15,6 +16,8 @@ SCRIPT = RACINE / "scripts" / "deploy" / "run_pipeline.py"
 
 @pytest.fixture(scope="module")
 def module():
+    if str(RACINE) not in sys.path:
+        sys.path.insert(0, str(RACINE))
     spec = importlib.util.spec_from_file_location("run_pipeline", SCRIPT)
     assert spec and spec.loader
     loaded = importlib.util.module_from_spec(spec)
@@ -85,6 +88,38 @@ def test_workflow_installe_le_parseur_et_ingere_les_rib():
     assert "uv sync --locked --extra bgpkit" in workflow
     assert '"rib"' in script
     assert "rib_snapshots" in script
+
+
+def test_pipeline_par_jour_et_job_parseurs():
+    pipeline = (RACINE / ".github" / "workflows" / "pipeline.yml").read_text(encoding="utf-8")
+    parsers = (RACINE / ".github" / "workflows" / "parsers.yml").read_text(encoding="utf-8")
+    assert "matrix:" in pipeline
+    assert "--no-manifest" in pipeline
+    assert "finalize_dataset.py" in pipeline
+    assert "ABRIP_ETL__SORT_PARTITIONS" in pipeline
+    assert "--all-extras" in parsers
+    assert "ABRIP_TEST_MRT_PATH" in parsers
+
+
+def test_manifest_final_depuis_fichiers_distants():
+    if str(RACINE) not in sys.path:
+        sys.path.insert(0, str(RACINE))
+    spec = importlib.util.spec_from_file_location(
+        "finalize_dataset", RACINE / "scripts" / "deploy" / "finalize_dataset.py"
+    )
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    fichiers = [
+        "curated/bgp_elements/date=2026-11-20/part-00000.parquet",
+        "analytics/events/date=2026-11-20/part-00000.parquet",
+        "README.md",
+        "manifest.json",
+    ]
+    assert module.build_manifest(fichiers) == {
+        "bgp_elements": ["curated/bgp_elements/date=2026-11-20/part-00000.parquet"],
+        "events": ["analytics/events/date=2026-11-20/part-00000.parquet"],
+    }
 
 
 def test_fenetre_par_defaut_et_cle_api_generee():

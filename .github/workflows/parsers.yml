@@ -1,0 +1,31 @@
+name: Parseurs MRT optionnels
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 4 * * 1" # hebdomadaire : détecte une dérive d'API amont
+
+jobs:
+  parseurs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v7
+
+      - name: Installer le projet et toutes les dépendances optionnelles
+        run: uv sync --locked --all-extras
+
+      - name: Télécharger un petit fichier MRT public
+        run: |
+          curl --fail --location --silent --show-error --retry 3 \
+            https://spaces.bgpkit.org/parser/update-example \
+            --output "${RUNNER_TEMP}/example.mrt"
+          ls -lh "${RUNNER_TEMP}/example.mrt"
+
+      - name: Tester bgpkit et mrtparse sur de vraies données
+        env:
+          ABRIP_TEST_MRT_PATH: ${{ runner.temp }}/example.mrt
+        run: uv run pytest -q tests/test_parseurs_optionnels.py

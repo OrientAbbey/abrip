@@ -13,12 +13,49 @@ on:
         required: false
 
 jobs:
+  dates:
+    runs-on: ubuntu-latest
+    outputs:
+      days: ${{ steps.compute.outputs.days }}
+    steps:
+      - name: Calculer les jours
+        id: compute
+        env:
+          INPUT_FROM: ${{ github.event.inputs.from }}
+          INPUT_TO: ${{ github.event.inputs.to }}
+          PIPELINE_DAYS: ${{ vars.PIPELINE_DAYS }}
+        run: |
+          # Jours complets uniquement : le jour courant est exclu car les
+          # archives MRT ont 5 à 15 minutes de retard.
+          JOURS="${PIPELINE_DAYS:-7}"
+          DEBUT="${INPUT_FROM:-$(date -u -d "$JOURS days ago" +%F)}"
+          FIN="${INPUT_TO:-$(date -u -d '1 day ago' +%F)}"
+          DAYS=$(DEBUT="$DEBUT" FIN="$FIN" python3 -c '
+          import datetime as dt, json, os
+          start = dt.date.fromisoformat(os.environ["DEBUT"])
+          end = dt.date.fromisoformat(os.environ["FIN"])
+          print(json.dumps([(start + dt.timedelta(days=i)).isoformat()
+                            for i in range((end - start).days + 1)]))
+          ')
+          echo "days=$DAYS" >> "$GITHUB_OUTPUT"
+          echo "Fenêtre : $DEBUT → $FIN ($DAYS)"
+
   pipeline:
+    needs: dates
     runs-on: ubuntu-latest
     timeout-minutes: 360
+    strategy:
+      # Un job lourd par jour, au plus 4 en parallèle sur le quota gratuit.
+      max-parallel: 4
+      fail-fast: false
+      matrix:
+        day: ${{ fromJson(needs.dates.outputs.days) }}
     env:
       ABRIP_DATA_DIR: ${{ github.workspace }}/.data
       ABRIP_LOG_LEVEL: INFO
+      # Le tri des partitions est désactivé dans le cloud : il débordait du
+      # disque temporaire sur de vraies données (voir docs/analyse-optimisation-pipeline.md).
+      ABRIP_ETL__SORT_PARTITIONS: "false"
     steps:
       - uses: actions/checkout@v7
 
@@ -27,20 +64,28 @@ jobs:
       - name: Installer le projet et le parseur MRT rapide
         run: uv sync --locked --extra bgpkit
 
-      - name: Ingestion, curation, détection et publication
+      - name: Ingestion, curation, détection du ${{ matrix.day }}
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           ABRIP_ALERTS__WEBHOOK_URL: ${{ secrets.ABRIP_ALERTS__WEBHOOK_URL }}
           HF_DATASET_REPO: ${{ vars.HF_DATASET_REPO }}
-          INPUT_FROM: ${{ github.event.inputs.from }}
-          INPUT_TO: ${{ github.event.inputs.to }}
-          PIPELINE_DAYS: ${{ vars.PIPELINE_DAYS }}
         run: |
-          # Sans dates : traite les N derniers jours complets, jusqu'à hier
-          # (les archives MRT ont 5 à 15 min de retard). N est configurable
-          # par la variable de dépôt PIPELINE_DAYS, 7 par défaut.
-          JOURS="${PIPELINE_DAYS:-7}"
-          DEBUT="${INPUT_FROM:-$(date -u -d "$JOURS days ago" +%F)}"
-          FIN="${INPUT_TO:-$(date -u -d '1 day ago' +%F)}"
           uv run --with huggingface_hub python scripts/deploy/run_pipeline.py \
-            --from "$DEBUT" --to "$FIN" --hf-repo "$HF_DATASET_REPO"
+            --from "${{ matrix.day }}" --to "${{ matrix.day }}" \
+            --hf-repo "$HF_DATASET_REPO" --no-manifest
+
+  finalize:
+    needs: pipeline
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v7
+
+      - name: Générer le manifeste et la carte du dataset
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_DATASET_REPO: ${{ vars.HF_DATASET_REPO }}
+        run: |
+          uv run --with huggingface_hub python scripts/deploy/finalize_dataset.py \
+            --hf-repo "$HF_DATASET_REPO"

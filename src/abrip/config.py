@@ -107,6 +107,10 @@ class EtlSettings(BaseModel):
     sort_partitions: bool = True
     row_group_size: int = 100_000
     sort_memory_limit: str = "1GB"  # le tri déborde sur disque au-delà
+    # Réglages avancés ; valeurs par défaut adaptées à un portable. Sur un
+    # runner, les monter à 4 threads / 8 Go et borner le disque temporaire.
+    sort_threads: int = 1
+    sort_max_temp_size: str | None = None
     # Rétention des couches curées et analytiques. Doit rester supérieure à
     # ingestion.raw_retention_days : les MRT disparaissent avant les Parquet
     # qu'ils ont produits. La purge n'est jamais automatique (voir `etl purge`).
