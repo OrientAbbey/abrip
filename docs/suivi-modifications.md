@@ -305,6 +305,7 @@ Objectif : clore la réserve du lot 1 sur les horodatages des endpoints qui renv
 - [x] `.github/workflows/pipeline.yml` (cron quotidien, fenêtre par défaut de 7 jours), `.github/workflows/keep-awake.yml` (ping toutes les 10 min), `start.sh`, `render.yaml` et copie du script dans le Dockerfile.
 - [x] Vérification : 12 tests dédiés (manifeste, mode distant, YAML, script) et 74 tests API/contrat/pipeline ciblés OK.
 - [x] Correctif après le premier run réel (28/11) : `auto` ne retombe plus silencieusement sur le parseur synthétique ; le workflow installe l'extra `bgpkit` et ingère aussi les RIB, dont dépend `compute_visibility`. Procédure complète de déploiement et diagnostic des erreurs ajoutés dans `docs/deploiement-sans-carte.md` (section 9).
+- [x] Correctif API `pybgpkit-parser` 0.24 : `Parser` est itérable et les champs sont lus via `elem.to_dict()`, plus de `parse_iter()`. Clé API générée par Render (`generateValue`) et fenêtre par défaut configurable (`PIPELINE_DAYS`, 7 jours jusqu'à hier).
 
 ## Vérification finale du lot 1 + 2
 

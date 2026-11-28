@@ -143,20 +143,36 @@ Dans le dépôt ABRIP : *Settings → Secrets and variables → Actions*.
 | Secret | `ABRIP_HEALTH_URL` | `https://<ton-service>.onrender.com/api/health` (à renseigner après l'étape 9.3) |
 | Secret | `ABRIP_ALERTS__WEBHOOK_URL` | webhook Slack, optionnel |
 | Variable | `HF_DATASET_REPO` | `toncompte/abrip-data` |
+| Variable | `PIPELINE_DAYS` | `7` (facultatif, nombre de jours traités quand aucune date n'est saisie) |
 
-Le workflow `pipeline.yml` accepte aussi deux entrées manuelles `from` et `to` au format `AAAA-MM-JJ`. Sans entrée, il traite les 7 derniers jours en incluant hier.
+### Que se passe-t-il si aucune date n'est saisie ?
+
+Le workflow calcule alors une fenêtre **glissante de jours complets** :
+
+```bash
+JOURS="${PIPELINE_DAYS:-7}"
+DEBUT="$(date -u -d "$JOURS days ago" +%F)"
+FIN="$(date -u -d '1 day ago' +%F)"
+```
+
+Par défaut, il traite donc **les 7 derniers jours terminés, jusqu'à hier inclus** ; `PIPELINE_DAYS=3` réduit cette fenêtre à 3 jours. Le jour courant est volontairement exclu : les archives MRT RouteViews/RIPE RIS sont publiées avec 5 à 15 minutes de retard et la journée en cours serait incomplète.
+
+L'ingestion s'arrête à `FIN` : la boucle du pipeline traite `DEBUT`, `DEBUT+1`, … jusqu'à `FIN`, puis enchaîne le calcul, la détection, le précalcul et la publication une seule fois. Le cron quotidien à 03:00 UTC relance le lendemain avec une nouvelle fenêtre, ce qui rattrape progressivement les jours manquants si le workflow a été suspendu.
+
+Si tu lances manuellement le workflow, les champs `from` et `to` sont facultatifs : renseigne-les pour rejouer une plage précise (par exemple une panne de plusieurs jours), sinon la fenêtre glissante s'applique.
 
 ### 9.3 Render (5 min)
 
 1. Crée un compte gratuit sur `render.com` (aucune carte nécessaire).
 2. *New → Blueprint*, connecte ton dépôt GitHub : `render.yaml` est détecté automatiquement.
-3. Renseigne les trois variables marquées `sync: false` :
+3. Renseigne les deux variables marquées `sync: false` :
 
 | Variable | Valeur |
 |---|---|
 | `ABRIP_REMOTE_DATA_URL` | `https://huggingface.co/datasets/toncompte/abrip-data/resolve/main` |
 | `ABRIP_REMOTE_DATA_TOKEN` | le token HF (idéalement un second token en lecture seule) |
-| `ABRIP_API__API_KEY` | une chaîne longue et aléatoire, par exemple générée avec `openssl rand -hex 32` sur n'importe quel service en ligne |
+
+`ABRIP_API__API_KEY` est **généré automatiquement** par Render (`generateValue: true`, valeur base64 de 256 bits). Tu n'as rien à saisir : la valeur est visible dans le service Render, onglet *Environment*, et peut être copiée si tu veux appeler l'API depuis un outil externe ou renseigner la clé dans le frontend.
 
 4. Déploie, puis copie l'URL publique du service. Retourne sur GitHub pour renseigner le secret `ABRIP_HEALTH_URL` avec cette URL + `/api/health`.
 
@@ -185,6 +201,7 @@ La réponse de `/api/health` doit lister `bgp_elements`, `metric_*` et `events` 
 | Symptôme dans les logs | Cause | Correction |
 |---|---|---|
 | `repli de parseur` | Le parseur rapide `bgpkit` n'était pas installé ; le code tombait sur le parseur synthétique | Le workflow installe maintenant `--extra bgpkit`. Si le message persiste, vérifier l'étape d'installation. |
+| `'Parser' object has no attribute 'parse_iter'` | API de `pybgpkit-parser` 0.24 : `Parser` est itérable et les champs passent par `elem.to_dict()` | Corrigé dans `mrt_parser.py` ; relancer le workflow après mise à jour du dépôt. |
 | `Aucune partition dans .../rib_snapshots` | Seules les `updates` étaient ingestées | Le workflow ingère désormais aussi le type `rib` ; le script échoue explicitement plus tôt si aucune partition RIB n'est produite. |
 | `HF_TOKEN doit être défini` | Secret GitHub absent | Ajouter le secret `HF_TOKEN` dans GitHub. |
 | `401 unauthorized` sur Render | Clé API configurée sans en-tête | Ajouter `X-API-Key` à la requête. |

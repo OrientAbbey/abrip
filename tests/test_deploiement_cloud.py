@@ -87,6 +87,15 @@ def test_workflow_installe_le_parseur_et_ingere_les_rib():
     assert "rib_snapshots" in script
 
 
+def test_fenetre_par_defaut_et_cle_api_generee():
+    workflow = (RACINE / ".github" / "workflows" / "pipeline.yml").read_text(encoding="utf-8")
+    blueprint = yaml.safe_load((RACINE / "render.yaml").read_text(encoding="utf-8"))
+    variables = {item["key"]: item for item in blueprint["services"][0]["envVars"] if "key" in item}
+    assert variables["ABRIP_API__API_KEY"]["generateValue"] is True
+    assert "PIPELINE_DAYS" in workflow
+    assert "1 day ago" in workflow  # le jour courant est exclu
+
+
 def test_auto_ne_retombe_pas_sur_le_synthetique(monkeypatch):
     from abrip.etl import mrt_parser
 

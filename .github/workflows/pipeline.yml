@@ -34,8 +34,13 @@ jobs:
           HF_DATASET_REPO: ${{ vars.HF_DATASET_REPO }}
           INPUT_FROM: ${{ github.event.inputs.from }}
           INPUT_TO: ${{ github.event.inputs.to }}
+          PIPELINE_DAYS: ${{ vars.PIPELINE_DAYS }}
         run: |
-          DEBUT="${INPUT_FROM:-$(date -u -d '7 days ago' +%F)}"
+          # Sans dates : traite les N derniers jours complets, jusqu'à hier
+          # (les archives MRT ont 5 à 15 min de retard). N est configurable
+          # par la variable de dépôt PIPELINE_DAYS, 7 par défaut.
+          JOURS="${PIPELINE_DAYS:-7}"
+          DEBUT="${INPUT_FROM:-$(date -u -d "$JOURS days ago" +%F)}"
           FIN="${INPUT_TO:-$(date -u -d '1 day ago' +%F)}"
           uv run --with huggingface_hub python scripts/deploy/run_pipeline.py \
             --from "$DEBUT" --to "$FIN" --hf-repo "$HF_DATASET_REPO"
