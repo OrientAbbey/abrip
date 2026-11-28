@@ -201,6 +201,7 @@ La réponse de `/api/health` doit lister `bgp_elements`, `metric_*` et `events` 
 | Symptôme dans les logs | Cause | Correction |
 |---|---|---|
 | `repli de parseur` | Le parseur rapide `bgpkit` n'était pas installé ; le code tombait sur le parseur synthétique | Le workflow installe maintenant `--extra bgpkit`. Si le message persiste, vérifier l'étape d'installation. |
+| `'Parser' object has no attribute 'parse_iter'` | API de `pybgpkit-parser` 0.24 : `Parser` est itérable et les champs passent par `elem.to_dict()` | Corrigé dans `mrt_parser.py` ; relancer le workflow après mise à jour du dépôt. |
 | `Aucune partition dans .../rib_snapshots` | Seules les `updates` étaient ingestées | Le workflow ingère désormais aussi le type `rib` ; le script échoue explicitement plus tôt si aucune partition RIB n'est produite. |
 | `HF_TOKEN doit être défini` | Secret GitHub absent | Ajouter le secret `HF_TOKEN` dans GitHub. |
 | `401 unauthorized` sur Render | Clé API configurée sans en-tête | Ajouter `X-API-Key` à la requête. |

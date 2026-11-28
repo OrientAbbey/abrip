@@ -52,19 +52,22 @@ class BgpkitParser(MRTParser):
         from pybgpkit_parser import Parser
 
         source = str(path)
-        for elem in Parser(url=source).parse_iter():
+        # pybgpkit-parser >= 0.24 : Parser est itérable et Elem s'expose via
+        # to_dict() ; l'ancien `parse_iter()` n'existe plus.
+        for elem in Parser(url=source):
+            fields = elem.to_dict()
             record = to_element_dict(
-                timestamp=elem.get("timestamp"),
+                timestamp=fields.get("timestamp"),
                 collector=collector,
-                peer_asn=elem.get("peer_asn"),
-                peer_ip=elem.get("peer_ip", ""),
-                elem_type=elem.get("elem_type", "A"),
-                prefix=elem.get("prefix", ""),
-                as_path=elem.get("as_path"),
-                next_hop=elem.get("next_hop"),
-                communities=elem.get("communities"),
-                med=elem.get("med"),
-                local_pref=elem.get("local_pref"),
+                peer_asn=fields.get("peer_asn"),
+                peer_ip=fields.get("peer_ip", ""),
+                elem_type=fields.get("elem_type", "A"),
+                prefix=fields.get("prefix", ""),
+                as_path=fields.get("as_path"),
+                next_hop=fields.get("next_hop"),
+                communities=fields.get("communities"),
+                med=fields.get("med"),
+                local_pref=fields.get("local_pref"),
                 source_file=path.name,
             )
             if record is not None:
